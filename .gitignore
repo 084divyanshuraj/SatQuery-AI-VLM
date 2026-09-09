@@ -15,5 +15,5 @@ venv/
 # IDE / OS
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
+# Temp user media
+WhatsApp Video*

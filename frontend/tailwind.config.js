@@ -7,35 +7,47 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Space-Navy Theme (SatQuery AI - SIH PS-26167)
+        // World-Class Non-Blue Design Tokens (Linear/Vercel Obsidian Onyx + Cyber Emerald + Cosmic Violet + Sunset Coral)
+        palette: {
+          obsidian: '#08090C',  // Pure Deep Velvet Obsidian Noir (100% Zero-Blue)
+          surface: '#12131C',   // Glassmorphic Card Surface
+          elevated: '#1A1B26',  // Elevated Focus Surface
+          border: 'rgba(255, 255, 255, 0.12)', // Subtle Micro-Borders
+          emerald: '#10B981',   // Cyber Emerald / Mint (Vision & Telemetry)
+          violet: '#8B5CF6',    // Cosmic Royal Violet (AI & Foundation Models)
+          coral: '#F43F5E',     // Sunset Coral (Change Detection & Alerts)
+          amber: '#F59E0B',     // Golden Amber (Metrics & Benchmarks)
+          white: '#FFFFFF',     // Pure Crisp White (18.8:1 Contrast)
+          silver: '#94A3B8',    // Platinum Silver Text
+        },
         'space-navy': {
-          bg: '#020617',         // Primary background (Deep space navy for high image contrast)
-          surface: '#0f172a',    // Secondary surface panels
-          border: '#1e293b',     // Micro-borders for crisp lines
+          bg: '#08090C',
+          surface: '#12131C',
+          border: 'rgba(255, 255, 255, 0.12)',
         },
         accent: {
-          primary: '#10b981',    // Emerald Green for active statuses
-          secondary: '#0d9488',  // Ocean Teal for focus states
-          spatial: '#f59e0b',    // Saffron / Amber for active segmentation masks & bounding boxes
+          primary: '#8B5CF6',
+          secondary: '#10B981',
+          spatial: '#F43F5E',
+          amber: '#F59E0B',
         },
-        // Extended tactical palette
         neon: {
-          cyan: '#00f0ff',
-          teal: '#0d9488',
-          emerald: '#10b981',
-          amber: '#f59e0b',
-          rose: '#f43f5e',
-          purple: '#9d4edd'
+          cyan: '#10B981',
+          teal: '#10B981',
+          emerald: '#10B981',
+          amber: '#F59E0B',
+          rose: '#F43F5E',
+          purple: '#8B5CF6'
         },
         space: {
-          950: '#020617',
-          900: '#0f172a',
-          850: '#131f37',
-          800: '#1e293b',
-          700: '#334155',
-          border: '#1e293b',
-          card: 'rgba(15, 23, 42, 0.85)',
-          glass: 'rgba(2, 6, 23, 0.9)'
+          950: '#050508',
+          900: '#08090C',
+          850: '#12131C',
+          800: '#1A1B26',
+          700: '#232433',
+          border: 'rgba(255, 255, 255, 0.12)',
+          card: 'rgba(18, 19, 28, 0.88)',
+          glass: 'rgba(8, 9, 12, 0.92)'
         }
       },
       fontFamily: {

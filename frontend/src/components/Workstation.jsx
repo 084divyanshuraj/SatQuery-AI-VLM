@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
 
-export default function Workstation({ mode: propMode, setMode: propSetMode, activeModality = 'single', onBackToHero, onReplayIntro }) {
+export default function Workstation({ mode: propMode, setMode: propSetMode, activeModality = 'single', onBackToHero, onBackToHub, onReplayIntro, onLogoutClick, currentUser }) {
   const [internalMode, setInternalMode] = useState(propMode || activeModality || 'single');
   const mode = propMode || internalMode;
   const setMode = propSetMode || setInternalMode;
@@ -194,7 +194,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
   
   // Thought trace logs and outputs — pre-seeded with real ISRO session boot sequence
   const defaultLogs = [
-    { step: 1, text: "ISRO SatQuery v2.0 — Geospatial Intelligence Workstation initialized. SIH PS-26167 active." },
+    { step: 1, text: "ISRO SatQuery v2.0 — Geospatial Intelligence Workstation initialized. Multi-Modal Pipeline active." },
     { step: 2, text: "Sentinel-2 MSI raster loaded: T43QKF tile, 10m GSD, 12 spectral channels (B01–B12)." },
     { step: 3, text: "CRS validated: EPSG:32643 (UTM Zone 43N). Spatial extent locked to AOI bounding box." },
     { step: 4, text: "AI inference engine ready. Query the Natural Language Portal to begin analysis." }
@@ -224,10 +224,10 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
     };
   }, []);
 
-  // Auto-scroll thought trace logs to bottom
+  // Auto-scroll thought trace logs to bottom without scrolling the page window
   useEffect(() => {
-    if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (logEndRef.current && logEndRef.current.parentNode) {
+      logEndRef.current.parentNode.scrollTop = logEndRef.current.parentNode.scrollHeight;
     }
   }, [logs]);
 
@@ -610,128 +610,148 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
   return (
     <section 
       id="workstation-viewport" 
-      className="relative w-full h-screen min-h-screen flex flex-col overflow-hidden font-sans select-none antialiased text-white"
+      className="relative w-full h-screen min-h-screen flex flex-col overflow-hidden font-sans select-none antialiased text-white bg-[#08090C] p-2.5 sm:p-3.5 gap-2.5 sm:gap-3"
     >
       
-      {/* 100% Scenic Nature Landscape Background without dark tint so tree & mountains shine clearly */}
+      {/* Dynamic Ambient Glow Orbs (Amethyst Violet & Cyber Emerald) */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${getWorkstationBgImage()})` }}
-        />
-        {/* Soft, light transparent layer for subtle readability without obscuring the background */}
-        <div className="absolute inset-0 bg-black/10 pointer-events-none" />
+        <div className="absolute -top-40 -left-40 w-[550px] h-[550px] bg-[#8B5CF6]/12 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute -bottom-40 -right-40 w-[550px] h-[550px] bg-[#10B981]/10 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-[#F43F5E]/06 rounded-full blur-[160px] pointer-events-none" />
       </div>
 
-      {/* Single Unified Full-Screen Workstation Glass Panel (100% Edge-to-Edge) */}
-      <div className="relative z-10 flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden bg-black/15 backdrop-blur-md">
-
-        {/* Integrated Top Header Bar inside the Panel Container */}
-        <header className="h-12 px-4 sm:px-6 flex items-center justify-between border-b border-white/15 bg-black/20 shrink-0 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            {onBackToHero && (
-              <button
-                onClick={onBackToHero}
-                title="Back to Space Entry Portal Landing Page"
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-900 border border-white/30 text-white text-xs font-mono font-bold transition-all cursor-pointer shadow-sm hover:border-emerald-400/70 backdrop-blur-md whitespace-nowrap"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>PORTAL</span>
-              </button>
-            )}
-            {/* Matching High-Tech Logo Emblem & Title */}
-            <div className="flex items-center gap-2.5 group cursor-pointer">
-              <div className="relative flex items-center justify-center w-8 h-8 rounded-xl overflow-hidden bg-slate-950 border border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.35)] backdrop-blur-md transition-all duration-300 group-hover:border-emerald-300 shrink-0">
-                <img 
-                  src="/satquery_logo.png" 
-                  alt="SatQuery AI Logo" 
-                  className="w-full h-full object-cover scale-110"
-                />
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-slate-950" />
-              </div>
-              <div className="flex items-center gap-1 leading-none">
-                <span className="font-sans font-black text-sm tracking-tight text-white drop-shadow-md">
-                  SatQuery
-                </span>
-                <span className="font-mono font-black text-sm tracking-wide bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                  AI
-                </span>
-              </div>
+      {/* Floating High-Contrast Glass Header Bar */}
+      <header className="relative z-10 h-12 px-4 sm:px-6 flex items-center justify-between rounded-2xl border border-white/10 bg-[#12131C]/90 shrink-0 backdrop-blur-2xl shadow-xl">
+        <div className="flex items-center gap-2.5">
+          {onBackToHub && (
+            <button
+              onClick={onBackToHub}
+              title="Back to Mission Control Hub"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#08090C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#8B5CF6] text-[#C084FC] hover:text-white text-xs font-mono font-bold transition-all cursor-pointer shadow-sm backdrop-blur-md whitespace-nowrap"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-[#C084FC]" />
+              <span>MISSION HUB</span>
+            </button>
+          )}
+          {onBackToHero && (
+            <button
+              onClick={onBackToHero}
+              title="Back to Space Entry Portal Landing Page"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#08090C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#10B981] text-[#34D399] hover:text-white text-xs font-mono font-bold transition-all cursor-pointer shadow-sm backdrop-blur-md whitespace-nowrap"
+            >
+              <span>PORTAL</span>
+            </button>
+          )}
+          {/* Matching High-Tech Logo Emblem & Title */}
+          <div className="flex items-center gap-2.5 group cursor-pointer">
+            <div className="relative flex items-center justify-center w-8 h-8 rounded-xl overflow-hidden bg-[#08090C] border border-[#8B5CF6]/50 shadow-[0_0_14px_rgba(139,92,246,0.3)] backdrop-blur-md transition-all duration-300 group-hover:border-[#8B5CF6] shrink-0">
+              <img 
+                src="/satquery_logo.png" 
+                alt="SatQuery AI Logo" 
+                className="w-full h-full object-cover scale-110"
+              />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#10B981] border border-[#08090C]" />
             </div>
-          </div>
-
-          {/* Genuine Real-Time Chronological & Geospatial Live Ticker (100% Live, Zero Mock) */}
-          <div className="hidden lg:flex items-center gap-2.5 px-3 py-1 rounded-full bg-black/35 border border-white/20 backdrop-blur-md text-xs font-mono shadow-sm">
-            {/* Live Date */}
-            <div className="flex items-center gap-1.5 text-white/90">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="font-semibold text-[11px]">{formattedDate}</span>
-            </div>
-            
-            <span className="text-white/30">|</span>
-
-            {/* Live Time Ticking Seconds */}
-            <div className="flex items-center gap-1.5 text-white/90">
-              <Clock className="w-3.5 h-3.5 text-teal-300 shrink-0 animate-pulse" />
-              <span className="text-teal-300 font-bold text-[11px] tabular-nums tracking-wide">{formattedTime}</span>
-              <span className="text-[9px] text-white/50">{timeZoneName.split('/').pop()?.replace('_', ' ')}</span>
-            </div>
-
-            <span className="text-white/30">|</span>
-
-            {/* Real Live Location & GPS Fix */}
-            <div className="flex items-center gap-1.5 text-white/90">
-              <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="font-semibold text-cyan-200 text-[11px]">
-                {geoData.city ? `${geoData.city}, ${geoData.country}` : `${geoData.lat.toFixed(4)}°, ${geoData.lon.toFixed(4)}°`}
+            <div className="flex items-center gap-1 leading-none">
+              <span className="font-sans font-black text-sm tracking-tight text-white drop-shadow-md">
+                SatQuery
               </span>
-              <span className="text-[9px] text-white/60">
-                ({geoData.lat.toFixed(4)}°N, {geoData.lon.toFixed(4)}°E)
+              <span className="font-mono font-black text-sm tracking-wide bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#10B981] bg-clip-text text-transparent">
+                AI
               </span>
             </div>
+          </div>
+        </div>
 
-            {/* Re-Sync Button with spinning animation */}
-            <button
-              type="button"
-              onClick={acquireLiveLocation}
-              disabled={isLocating}
-              title="Re-acquire Live GPS Fix & Recalibrate Clock"
-              className="ml-1 p-1 rounded-full hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition cursor-pointer"
-            >
-              <RotateCw className={`w-3 h-3 ${isLocating ? 'animate-spin text-cyan-300' : ''}`} />
-            </button>
+        {/* Real Live Indian / User Standard Time & Local Weather Node */}
+        <div className="hidden md:flex items-center gap-3 text-xs font-mono">
+          
+          {/* Real Live Date & Time */}
+          <div className="flex items-center gap-1.5 text-white/90">
+            <Calendar className="w-3.5 h-3.5 text-[#C084FC] shrink-0" />
+            <span className="font-semibold text-white tracking-wide">
+              {formattedDate}
+            </span>
           </div>
 
-          {/* Header Actions: PDF Export + Lock Button */}
-          <div className="flex items-center gap-2 shrink-0">
+          <span className="text-white/20">|</span>
 
-            {/* High-Tech EXPORT REPORT (PDF) Button in Header Bar */}
+          {/* Real Live Digital Clock */}
+          <div className="flex items-center gap-1.5 text-white/90">
+            <Clock className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
+            <span className="font-bold text-[#34D399] tracking-wider text-[13px]">
+              {formattedTime}
+            </span>
+            <span className="text-[9px] text-slate-400">{timeZoneName.split('/').pop()?.replace('_', ' ')}</span>
+          </div>
+
+          <span className="text-white/20">|</span>
+
+          {/* Real Live Location & GPS Fix */}
+          <div className="flex items-center gap-1.5 text-white/90">
+            <MapPin className="w-3.5 h-3.5 text-[#F43F5E] shrink-0" />
+            <span className="font-semibold text-[#FDA4AF] text-[11px]">
+              {geoData.city ? `${geoData.city}, ${geoData.country}` : `${geoData.lat.toFixed(4)}°, ${geoData.lon.toFixed(4)}°`}
+            </span>
+            <span className="text-[9px] text-slate-400">
+              ({geoData.lat.toFixed(4)}°N, {geoData.lon.toFixed(4)}°E)
+            </span>
+          </div>
+
+          {/* Re-Sync Button with spinning animation */}
+          <button
+            type="button"
+            onClick={acquireLiveLocation}
+            disabled={isLocating}
+            title="Re-acquire Live GPS Fix & Recalibrate Clock"
+            className="ml-1 p-1 rounded-full hover:bg-white/10 text-[#34D399] hover:text-white transition cursor-pointer"
+          >
+            <RotateCw className={`w-3 h-3 ${isLocating ? 'animate-spin text-[#34D399]' : ''}`} />
+          </button>
+        </div>
+
+        {/* Header Actions: PDF Export + Lock Button */}
+        <div className="flex items-center gap-2 shrink-0">
+
+          {/* High-Tech EXPORT REPORT (PDF) Button with High-Contrast Gradient */}
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            disabled={isExporting}
+            title="Download Executive Geospatial Intelligence PDF Report"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F43F5E] hover:opacity-95 text-white font-mono font-black text-xs transition-all cursor-pointer shadow-[0_0_18px_rgba(139,92,246,0.4)] backdrop-blur-md active:scale-95 shrink-0"
+          >
+            <Download className={`w-3.5 h-3.5 text-white ${isExporting ? 'animate-bounce' : ''}`} />
+            <span className="hidden sm:inline">{isExporting ? "GENERATING PDF..." : "EXPORT REPORT (PDF)"}</span>
+            <span className="sm:hidden">{isExporting ? "PDF..." : "EXPORT"}</span>
+          </button>
+
+          {/* Logout Button in Workstation Header */}
+          {onLogoutClick && (
             <button
               type="button"
-              onClick={handleExportPDF}
-              disabled={isExporting}
-              title="Download Executive Geospatial Intelligence PDF Report"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/25 hover:bg-emerald-500/40 border border-emerald-400/60 text-emerald-200 text-xs font-mono font-bold transition-all cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.3)] hover:border-emerald-300 backdrop-blur-md active:scale-95 shrink-0"
+              onClick={onLogoutClick}
+              title="Sign out of SatQuery AI"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#08090C] hover:bg-rose-950/80 border border-white/10 hover:border-rose-500/60 text-slate-300 hover:text-rose-200 text-xs font-mono font-bold transition-all cursor-pointer backdrop-blur-md shrink-0"
             >
-              <Download className={`w-3.5 h-3.5 text-emerald-400 ${isExporting ? 'animate-bounce' : ''}`} />
-              <span className="hidden sm:inline">{isExporting ? "GENERATING PDF..." : "EXPORT REPORT (PDF)"}</span>
-              <span className="sm:hidden">{isExporting ? "PDF..." : "EXPORT"}</span>
+              <span>LOGOUT</span>
             </button>
-          </div>
-        </header>
+          )}
+        </div>
+      </header>
 
-        {/* Integrated 3-Section Workstation Body */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-white/15">
+      {/* Floating 3-Section Workstation Body Container */}
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden gap-2.5 sm:gap-3">
 
-          {/* ============================================================ */}
-          {/* SECTION A: WORKFLOW REGISTRY & INGESTION                     */}
-          {/* ============================================================ */}
-          <aside className="w-full lg:w-[240px] xl:w-[270px] h-full flex flex-col justify-between shrink-0 p-3.5 overflow-y-auto bg-black/10 hover:bg-black/15 transition">
+        {/* ============================================================ */}
+        {/* SECTION A: WORKFLOW REGISTRY & INGESTION                     */}
+        {/* ============================================================ */}
+        <aside className="w-full lg:w-[240px] xl:w-[270px] h-full flex flex-col justify-between shrink-0 p-3.5 overflow-y-auto rounded-2xl bg-[#12131C]/90 backdrop-blur-2xl border border-white/10 shadow-xl">
           <div className="space-y-3">
             
             {/* Workflow Registry Header & Mode Buttons */}
             <div>
-              <span className="text-[9.5px] font-mono font-bold tracking-widest text-emerald-300 uppercase block mb-2 drop-shadow-sm">
+              <span className="text-[9.5px] font-mono font-bold tracking-widest text-[#8B5CF6] uppercase block mb-2 drop-shadow-sm">
                 ● WORKFLOW REGISTRY
               </span>
               <div className="grid grid-cols-1 gap-1.5">
@@ -766,15 +786,15 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                       }}
                       className={`w-full text-left px-3 py-2 rounded-xl border text-[11px] font-semibold tracking-wide transition-all cursor-pointer flex items-center justify-between ${
                         isActive 
-                          ? 'bg-emerald-500/25 border-emerald-400/80 text-emerald-200 shadow-sm'
-                          : 'border-white/10 bg-white/5 hover:bg-white/15 hover:border-white/25 text-white/90'
+                          ? 'bg-gradient-to-r from-[#8B5CF6]/30 via-[#10B981]/25 to-[#F43F5E]/20 border-2 border-[#10B981] text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] font-bold'
+                          : 'border-white/10 bg-[#08090C]/80 hover:bg-[#1A1B26] hover:border-[#8B5CF6]/50 text-slate-300'
                       }`}
                     >
                       <div className="flex items-center gap-1.5">
-                        {item.isBenchmark && <BarChart3 className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                        {item.isBenchmark && <BarChart3 className="w-3.5 h-3.5 text-[#F43F5E] shrink-0" />}
                         <span>{item.label}</span>
                       </div>
-                      {isActive && <Check className="w-3.5 h-3.5 text-emerald-300" />}
+                      {isActive && <Check className="w-3.5 h-3.5 text-[#10B981]" />}
                     </button>
                   );
                 })}
@@ -784,24 +804,24 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
             {/* Data Ingestion Section */}
             {mode !== 'benchmarks' ? (
               <div className="space-y-2.5">
-                <span className="text-[9.5px] font-mono font-bold tracking-widest text-emerald-300 uppercase block drop-shadow-sm">
+                <span className="text-[9.5px] font-mono font-bold tracking-widest text-[#10B981] uppercase block drop-shadow-sm">
                   ● DATA INGESTION
                 </span>
                 
                 {/* Primary GeoTIFF Upload Box */}
                 <div 
                   onClick={() => opticalInputRef.current?.click()}
-                  className="border border-dashed border-emerald-400/40 hover:border-emerald-400 rounded-xl p-2.5 text-center cursor-pointer bg-black/20 hover:bg-black/30 transition group"
+                  className="border border-dashed border-white/15 hover:border-[#8B5CF6] rounded-xl p-2.5 text-center cursor-pointer bg-[#08090C]/90 hover:bg-[#1A1B26] transition group"
                 >
                   <input 
                     ref={opticalInputRef}
                     type="file" 
-                    accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg"
+                    accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg" 
                     onChange={(e) => handleImport(e, 'optical')} 
                     className="hidden" 
                   />
                   <div className="flex items-center justify-center gap-1.5 text-white/90 group-hover:text-white">
-                    <Upload className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <Upload className="w-3.5 h-3.5 text-[#8B5CF6] shrink-0" />
                     <span className="text-xs font-semibold font-mono truncate">
                       {opticalFile ? opticalFile.name : (
                         mode === 'bitemporal' ? "T1 Baseline GeoTIFF (.tif)" :
@@ -810,7 +830,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                       )}
                     </span>
                   </div>
-                  <span className="text-[8.5px] text-white/60 font-mono block mt-0.5">
+                  <span className="text-[8.5px] text-slate-400 font-mono block mt-0.5">
                     {isUploading ? "Extracting GeoTIFF Bands..." : (
                       mode === 'bitemporal' ? "Baseline T0/T1 raster image" :
                       mode === 'crossmodal' ? "Sentinel-2 VNIR/SWIR multispectral file" :
@@ -823,7 +843,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                 {(mode === 'bitemporal' || mode === 'crossmodal') && (
                   <div 
                     onClick={() => sarInputRef.current?.click()}
-                    className="w-full py-2 px-2.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/15 text-white/90 hover:text-white font-mono text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition shadow-sm backdrop-blur-sm group animate-fadeIn"
+                    className="w-full py-2 px-2.5 rounded-xl border border-white/15 bg-[#08090C]/90 hover:bg-[#1A1B26] hover:border-[#10B981] text-slate-200 hover:text-white font-mono text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition shadow-sm backdrop-blur-sm group animate-fadeIn"
                   >
                     <input 
                       ref={sarInputRef}
@@ -832,7 +852,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                       onChange={(e) => handleImport(e, 'sar')} 
                       className="hidden" 
                     />
-                    <Upload className="w-3.5 h-3.5 text-cyan-400 group-hover:text-cyan-300 shrink-0" />
+                    <Upload className="w-3.5 h-3.5 text-[#10B981] group-hover:text-[#F43F5E] shrink-0" />
                     <span className="truncate">
                       {sarFile ? sarFile.name : (
                         mode === 'bitemporal' ? "T2 Post-Event GeoTIFF (.tif)" : "SAR Polarimetric (.tif)"
@@ -843,8 +863,8 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
 
               </div>
             ) : (
-              <div className="p-3 bg-amber-500/15 border border-amber-400/30 rounded-xl space-y-1.5 animate-fadeIn">
-                <div className="flex items-center gap-1.5 text-amber-300 text-xs font-bold font-mono">
+              <div className="p-3 bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 rounded-xl space-y-1.5 animate-fadeIn">
+                <div className="flex items-center gap-1.5 text-[#8B5CF6] text-xs font-bold font-mono">
                   <Award className="w-3.5 h-3.5" />
                   <span>MODEL BENCHMARKS ACTIVE</span>
                 </div>
@@ -860,33 +880,33 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
         {/* ============================================================ */}
         {/* SECTION B: INTERACTIVE GIS CANVAS                            */}
         {/* ============================================================ */}
-        <main className="flex-1 min-w-0 h-full flex flex-col justify-between p-3.5 relative overflow-hidden bg-black/5">
+        <main className="flex-1 min-w-0 h-full flex flex-col justify-between p-3.5 relative overflow-hidden rounded-2xl bg-[#12131C]/90 backdrop-blur-2xl border border-white/10 shadow-xl">
           
           {/* Header Inside Canvas Panel */}
           <div className="mb-2 select-none shrink-0 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+                <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
                 <h2 className="font-display font-extrabold text-base text-white tracking-wide drop-shadow-md">
                   Interactive Geospatial Canvas
                 </h2>
               </div>
-              <p className="text-[10.5px] font-mono text-emerald-300/90 font-medium tracking-wide drop-shadow-sm mt-0.5">
+              <p className="text-[10.5px] font-mono text-[#10B981] font-medium tracking-wide drop-shadow-sm mt-0.5">
                 Visual inspection of multispectral satellite rasters & AI spatial reasoning
               </p>
             </div>
             
             {/* Subtle Status Indicator */}
             {getCanvasStatus() && (
-              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 border border-white/15 text-[9px] font-mono text-white/80 backdrop-blur-md">
-                <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-amber-400 animate-ping' : (activeAnalysisResult || output) ? 'bg-emerald-400' : 'bg-cyan-400 animate-pulse'}`} />
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#08090C] border border-white/15 text-[9px] font-mono text-slate-200 backdrop-blur-md">
+                <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-[#F43F5E] animate-ping' : (activeAnalysisResult || output) ? 'bg-[#10B981]' : 'bg-[#8B5CF6] animate-pulse'}`} />
                 <span>{getCanvasStatus()}</span>
               </div>
             )}
           </div>
 
           {/* Main Visual Viewport: Workflow-Aware Real Satellite Imagery Area */}
-          <div className="relative flex-1 w-full rounded-xl overflow-hidden border border-white/20 bg-black/10 backdrop-blur-sm flex items-center justify-center min-h-0">
+          <div className="relative flex-1 w-full rounded-xl overflow-hidden border border-white/15 bg-[#08090C]/95 backdrop-blur-sm flex items-center justify-center min-h-0">
             
             {/* WORKFLOW 4: PERFORMANCE & BENCHMARKS */}
             {mode === 'benchmarks' ? (
@@ -901,20 +921,20 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
               /* EMPTY STATE: High-Tech HUD Drop Zone Placeholder when no data is uploaded */
               <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none animate-fadeIn">
                 <div className="relative mb-3">
-                  <div className="w-14 h-14 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 flex items-center justify-center backdrop-blur-md shadow-[0_0_25px_rgba(16,185,129,0.2)]">
-                    <Upload className="w-6 h-6 text-emerald-400 animate-pulse" />
+                  <div className="w-14 h-14 rounded-2xl border border-[#8B5CF6]/50 bg-[#12131C] flex items-center justify-center backdrop-blur-md shadow-[0_0_25px_rgba(139,92,246,0.25)]">
+                    <Upload className="w-6 h-6 text-[#8B5CF6] animate-pulse" />
                   </div>
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-cyan-400 flex items-center justify-center text-[9px] font-mono text-slate-950 font-bold shadow">
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#10B981] flex items-center justify-center text-[9px] font-mono text-[#08090C] font-black shadow">
                     +
                   </span>
                 </div>
 
                 <h3 className="text-xs font-mono font-bold text-white tracking-widest uppercase mb-1.5 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
                   <span>NO SATELLITE RASTER LOADED</span>
                 </h3>
 
-                <p className="text-[10.5px] font-mono text-white/80 max-w-md leading-relaxed mb-4">
+                <p className="text-[10.5px] font-mono text-slate-400 max-w-md leading-relaxed mb-4">
                   {mode === 'single' && "Upload a primary GeoTIFF (.tif) multispectral raster file (Sentinel-2 / Landsat-8)."}
                   {mode === 'bitemporal' && "Upload 2 temporal GeoTIFF (.tif) raster files (T1 Baseline & T2 Post-Event)."}
                   {mode === 'crossmodal' && "Upload 2 multi-sensor GeoTIFF (.tif) raster files (Optical Multispectral & SAR Polarimetric)."}
@@ -924,18 +944,18 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                   <button
                     type="button"
                     onClick={() => opticalInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-mono font-bold text-xs flex items-center gap-2 transition cursor-pointer backdrop-blur-md shadow"
+                    className="px-3.5 py-2 rounded-xl bg-[#12131C] hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] text-white font-mono font-bold text-xs flex items-center gap-2 transition cursor-pointer backdrop-blur-md shadow"
                   >
-                    <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                    <Upload className="w-3.5 h-3.5 text-[#10B981]" />
                     <span>UPLOAD GEOTIFF (.tif)</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => loadSamplePreset(mode)}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-mono font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-lg"
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F43F5E] hover:opacity-95 text-white font-mono font-black text-xs flex items-center gap-2 transition cursor-pointer shadow-[0_0_18px_rgba(139,92,246,0.4)]"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
                     <span>LOAD SAMPLE DEMO TILE</span>
                   </button>
                 </div>
@@ -957,18 +977,18 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
 
                     {/* Subtle Toggle for Analysis Result (if available) */}
                     {activeAnalysisResult && (
-                      <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/75 border border-white/20 rounded-lg p-1 backdrop-blur-md z-20 font-mono text-[9px] shadow-lg">
+                      <div className="absolute top-3 right-3 flex items-center gap-1 bg-[#08090C]/90 border border-white/15 rounded-lg p-1 backdrop-blur-md z-20 font-mono text-[9px] shadow-lg">
                         <button
                           type="button"
                           onClick={() => setShowAnalysisOverlay(false)}
-                          className={`px-2 py-0.5 rounded transition cursor-pointer ${!showAnalysisOverlay ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-white/70 hover:text-white'}`}
+                          className={`px-2 py-0.5 rounded transition cursor-pointer ${!showAnalysisOverlay ? 'bg-[#10B981] text-[#08090C] font-bold' : 'text-slate-300 hover:text-white'}`}
                         >
                           RAW RASTER
                         </button>
                         <button
                           type="button"
                           onClick={() => setShowAnalysisOverlay(true)}
-                          className={`px-2 py-0.5 rounded transition cursor-pointer ${showAnalysisOverlay ? 'bg-emerald-400 text-slate-950 font-bold' : 'text-white/70 hover:text-white'}`}
+                          className={`px-2 py-0.5 rounded transition cursor-pointer ${showAnalysisOverlay ? 'bg-[#8B5CF6] text-white font-bold' : 'text-slate-300 hover:text-white'}`}
                         >
                           ANALYSIS RESULT
                         </button>
@@ -1004,8 +1024,8 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
               /* WORKFLOW 2: BI-TEMPORAL CHANGE (Exactly 2 satellite images: BEFORE | AFTER) */
               <div className="relative w-full h-full flex flex-col md:flex-row items-center justify-center gap-3 p-3 overflow-hidden">
                 {/* BEFORE LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-black/20 border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-black/80 border border-white/15 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider text-white/90 backdrop-blur-md">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#10B981] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#10B981] backdrop-blur-md shadow-[0_0_12px_rgba(16,185,129,0.3)]">
                     BEFORE
                   </div>
                   {layerErrors['before'] ? (
@@ -1024,13 +1044,13 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                 </div>
 
                 {/* Transition Indicator Arrow */}
-                <div className="hidden md:flex items-center justify-center w-7 h-7 rounded-full bg-black/60 border border-white/15 text-white/70 shrink-0 z-10">
+                <div className="hidden md:flex items-center justify-center w-7 h-7 rounded-full bg-[#12131C] border border-white/15 text-[#F43F5E] shrink-0 z-10">
                   <span className="font-mono text-sm leading-none">→</span>
                 </div>
 
                 {/* AFTER LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-black/20 border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-black/80 border border-white/15 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider text-white/90 backdrop-blur-md">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#F43F5E] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#F43F5E] backdrop-blur-md shadow-[0_0_12px_rgba(244,63,94,0.3)]">
                     AFTER
                   </div>
                   {layerErrors['after'] ? (
@@ -1055,8 +1075,8 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
               /* WORKFLOW 3: OPTICAL-SAR FUSION (Exactly 2 layers: OPTICAL | SAR) */
               <div className="relative w-full h-full flex flex-col md:flex-row items-center justify-center gap-3 p-3 overflow-hidden">
                 {/* OPTICAL LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-black/20 border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-black/80 border border-white/15 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider text-cyan-300 backdrop-blur-md">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#10B981] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#10B981] backdrop-blur-md">
                     OPTICAL
                   </div>
                   {layerErrors['optical'] ? (
@@ -1075,13 +1095,13 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                 </div>
 
                 {/* Fusion Plus Divider */}
-                <div className="hidden md:flex items-center justify-center w-7 h-7 rounded-full bg-black/60 border border-white/15 text-white/70 shrink-0 z-10">
+                <div className="hidden md:flex items-center justify-center w-7 h-7 rounded-full bg-[#12131C] border border-white/15 text-[#8B5CF6] shrink-0 z-10">
                   <span className="font-mono text-sm leading-none">+</span>
                 </div>
 
                 {/* SAR LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-black/20 border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-black/80 border border-white/15 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider text-amber-300 backdrop-blur-md">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#8B5CF6] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#8B5CF6] backdrop-blur-md">
                     SAR
                   </div>
                   {layerErrors['sar'] ? (
@@ -1109,35 +1129,33 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
               <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30">
                 <button 
                   onClick={() => setZoomLevel(prev => Math.min(prev + 1, 16))}
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 flex items-center justify-center text-white/90 hover:text-white transition backdrop-blur-md shadow-md cursor-pointer"
+                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] flex items-center justify-center text-[#10B981] transition backdrop-blur-md shadow-md cursor-pointer"
                   title="Zoom In"
                 >
-                  <ZoomIn className="w-3.5 h-3.5" />
+                  <ZoomIn className="w-3.5 h-3.5 text-[#10B981]" />
                 </button>
                 <button 
                   onClick={() => setZoomLevel(prev => Math.max(prev - 1, 8))}
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 flex items-center justify-center text-white/90 hover:text-white transition backdrop-blur-md shadow-md cursor-pointer"
+                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] flex items-center justify-center text-[#10B981] transition backdrop-blur-md shadow-md cursor-pointer"
                   title="Zoom Out"
                 >
-                  <ZoomOut className="w-3.5 h-3.5" />
+                  <ZoomOut className="w-3.5 h-3.5 text-[#10B981]" />
                 </button>
                 <button 
                   onClick={() => setZoomLevel(11)}
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 flex items-center justify-center text-white/90 hover:text-white transition backdrop-blur-md shadow-md cursor-pointer"
+                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#8B5CF6] flex items-center justify-center text-[#8B5CF6] transition backdrop-blur-md shadow-md cursor-pointer"
                   title="Recenter AOI"
                 >
-                  <Crosshair className="w-3.5 h-3.5 text-emerald-400" />
+                  <Crosshair className="w-3.5 h-3.5 text-[#8B5CF6]" />
                 </button>
                 <button 
-                  className="w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 flex items-center justify-center text-white/90 hover:text-white transition backdrop-blur-md shadow-md cursor-pointer"
+                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#F43F5E] flex items-center justify-center text-[#F43F5E] transition backdrop-blur-md shadow-md cursor-pointer"
                   title="Layers Configuration"
                 >
-                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                  <Layers className="w-3.5 h-3.5 text-[#F43F5E]" />
                 </button>
               </div>
             )}
-
-
 
           </div>
 
@@ -1146,7 +1164,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
         {/* ============================================================ */}
         {/* SECTION C: CHAT-FIRST AGENTIC ANALYST (ChatGPT-style)        */}
         {/* ============================================================ */}
-        <aside className="w-full lg:w-[360px] xl:w-[420px] h-full flex flex-col shrink-0 overflow-hidden bg-slate-950/85 backdrop-blur-xl border-l border-emerald-500/25 shadow-2xl">
+        <aside className="w-full lg:w-[360px] xl:w-[420px] h-full flex flex-col shrink-0 overflow-hidden rounded-2xl bg-[#12131C]/90 backdrop-blur-2xl border border-white/10 shadow-xl">
           <GeoChatbot
             workstationContext={{
               opticalImage,
@@ -1176,7 +1194,6 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
           />
         </aside>
 
-        </div>
       </div>
     </section>
   );

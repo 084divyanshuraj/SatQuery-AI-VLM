@@ -220,7 +220,7 @@ export default function IsroLoadingSequence({ onComplete }) {
         <div className="flex items-center gap-2 mt-2 font-mono text-[9px] text-white/60 tracking-widest uppercase">
           <span>EARTH OBSERVATION & REMOTE SENSING PROGRAMME</span>
           <span className="text-white/30">•</span>
-          <span className="text-amber-400 font-semibold">SIH PS-26167</span>
+          <span className="text-emerald-400 font-semibold">GEO-FOUNDATION AI</span>
         </div>
       </div>
 
