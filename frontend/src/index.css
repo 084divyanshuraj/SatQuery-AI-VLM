@@ -1,0 +1,160 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@1,400;1,500;1,600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes heroReveal { 0%{opacity:0;transform:translateY(28px);filter:blur(12px)} 100%{opacity:1;transform:translateY(0);filter:blur(0)} }
+@keyframes heroFadeUp { 0%{opacity:0;transform:translateY(20px)} 100%{opacity:1;transform:translateY(0)} }
+@keyframes heroZoom { 0%{transform:scale(1.12)} 100%{transform:scale(1)} }
+.hero-anim { opacity:0; animation-fill-mode:forwards; animation-timing-function:cubic-bezier(0.16,1,0.3,1); }
+.hero-reveal { animation-name:heroReveal; animation-duration:1.1s; }
+.hero-fade { animation-name:heroFadeUp; animation-duration:1s; }
+.hero-zoom { animation:heroZoom 1.8s cubic-bezier(0.16,1,0.3,1) forwards; }
+
+/* ISRO Cinematic Mission Loading Sequence Keyframes */
+@keyframes isroEarthReveal {
+  0% { opacity: 0; transform: scale(1.04); filter: brightness(0.2); }
+  25% { opacity: 0.75; filter: brightness(0.7); }
+  100% { opacity: 1; transform: scale(1.00); filter: brightness(1.0); }
+}
+@keyframes isroAtmosphereGlow {
+  0% { opacity: 0; }
+  30% { opacity: 0.3; }
+  100% { opacity: 0.8; }
+}
+@keyframes isroSunriseBurst {
+  0%, 20% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 0.95; transform: scale(1.0); }
+  100% { opacity: 0.85; transform: scale(1.0); }
+}
+@keyframes isroBrandIn {
+  0%, 25% { opacity: 0; transform: translateY(12px); }
+  55%, 100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes isroTelemetryFadeIn {
+  0%, 30% { opacity: 0; }
+  60%, 100% { opacity: 1; }
+}
+@keyframes isroLineProgress {
+  0% { width: 0%; }
+  25% { width: 28%; }
+  55% { width: 68%; }
+  85% { width: 92%; }
+  100% { width: 100%; }
+}
+.animate-isro-earth { animation: isroEarthReveal 2.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-isro-atmosphere { animation: isroAtmosphereGlow 2.5s ease-out forwards; }
+.animate-isro-sunrise { animation: isroSunriseBurst 2.8s ease-out forwards; }
+.animate-isro-brand { animation: isroBrandIn 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-isro-telemetry { animation: isroTelemetryFadeIn 2.4s ease-out forwards; }
+.animate-isro-progress { animation: isroLineProgress 3.6s linear forwards; }
+
+@media (prefers-reduced-motion: reduce){ 
+  .hero-anim, .hero-zoom, 
+  .animate-isro-earth, .animate-isro-atmosphere, 
+  .animate-isro-sunrise, .animate-isro-brand, 
+  .animate-isro-telemetry, .animate-isro-progress { 
+    animation: none !important; 
+    opacity: 1 !important; 
+  } 
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    background-color: #020617;
+    overflow-x: hidden;
+  }
+
+  code, kbd, samp, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Geist Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Tactical Micro-borders & Crisp HUD Containers */
+.micro-border {
+  border: 1px solid #1e293b;
+}
+
+.micro-border-active {
+  border: 1px solid #10b981;
+}
+
+.spatial-highlight {
+  border: 1px solid #f59e0b;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #1e293b;
+}
+
+.glass-panel-hover:hover {
+  border-color: #0d9488;
+  box-shadow: 0 0 20px rgba(13, 148, 136, 0.2);
+}
+
+/* Tactical Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #020617;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0d9488;
+}
+
+/* Dark GIS Map Container & Composites */
+.leaflet-container {
+  background-color: #020617 !important;
+  font-family: 'Inter', sans-serif;
+  width: 100%;
+  height: 100%;
+}
+
+.map-dark-tiles {
+  filter: brightness(0.85) contrast(1.15) saturate(1.1);
+}
+
+.map-ndvi-overlay {
+  filter: contrast(1.3) hue-rotate(90deg) saturate(1.8);
+}
+
+.map-false-color {
+  filter: contrast(1.4) hue-rotate(240deg) saturate(1.9);
+}
+
+.map-swir-infrared {
+  filter: contrast(1.5) hue-rotate(30deg) saturate(2.0);
+}
+
+/* Subtle Space Grid */
+.space-grid-bg {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(30, 41, 59, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 41, 59, 0.35) 1px, transparent 1px);
+}
+

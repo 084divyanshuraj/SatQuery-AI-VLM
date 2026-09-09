@@ -1,0 +1,5 @@
+backend/data/sample_pairs/S2A_MSIL2A_sample.tif|backend/data/sample_pairs/S1A_IW_GRDH_sample.tif|dense coniferous forest with river meander in spring
+backend/data/sample_pairs/S2A_MSIL2A_sample.tif|backend/data/sample_pairs/S1A_IW_GRDH_sample.tif|industrial commercial zone adjacent to agricultural fields
+backend/data/sample_pairs/S2A_MSIL2A_sample.tif|backend/data/sample_pairs/S1A_IW_GRDH_sample.tif|water reservoir basin and seasonal inundation zone
+backend/data/sample_pairs/S2A_MSIL2A_sample.tif|backend/data/sample_pairs/S1A_IW_GRDH_sample.tif|sparse crop canopy with high soil moisture
+backend/data/sample_pairs/S2A_MSIL2A_sample.tif|backend/data/sample_pairs/S1A_IW_GRDH_sample.tif|coastal shoreline and estuarine wetland
