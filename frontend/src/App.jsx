@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import HeroSection from './components/HeroSection.jsx';
 import Workstation from './components/Workstation.jsx';
 import IsroLoadingSequence from './components/IsroLoadingSequence.jsx';
-import LoginPage from './components/LoginPage.jsx';
 
 export default function App() {
   const [isLoadingComplete, setIsLoadingComplete] = useState(() => {
@@ -15,18 +14,6 @@ export default function App() {
       }
     }
     return false;
-  });
-
-  const [currentUser, setCurrentUser] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('satquery_user');
-        if (saved) return JSON.parse(saved);
-      } catch (err) {
-        console.warn("User state parse fallback:", err);
-      }
-    }
-    return null;
   });
 
   const [activeModality, setActiveModality] = useState('single');
@@ -54,14 +41,6 @@ export default function App() {
     setIsLoadingComplete(false);
   };
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('satquery_user');
-      localStorage.removeItem('satquery_auth_token');
-    }
-    setCurrentUser(null);
-  };
-
   useEffect(() => {
     if (window.location.hash === '#workstation-viewport' || window.location.search.includes('view=workstation')) {
       const el = document.getElementById('workstation-viewport');
@@ -81,31 +60,17 @@ export default function App() {
         }} />
       )}
 
-      {/* 2. Secure ISRO Officer Clearance Gate (Login / Registration) after loading animation */}
-      {isLoadingComplete && !currentUser && (
-        <LoginPage 
-          onLoginSuccess={(user) => {
-            setCurrentUser(user);
-            window.scrollTo({ top: 0, behavior: 'instant' });
-          }}
-        />
-      )}
-
-      {/* 3. Authenticated Intelligence Portal & Workstation */}
-      {isLoadingComplete && currentUser && (
+      {/* 2. Direct Workstation & Portal Access (No Login Gate) */}
+      {isLoadingComplete && (
         <>
           {/* Viewport 1: Space Entry Portal Landing Page */}
           <HeroSection 
-            currentUser={currentUser}
-            onLogout={handleLogout}
             onGetStarted={() => scrollToWorkstation()}
             onSelectModality={(modalityId) => scrollToWorkstation(modalityId)}
           />
 
           {/* Viewport 2: Single-Viewport 3-Pane Engineering Workstation */}
           <Workstation 
-            currentUser={currentUser}
-            onLogout={handleLogout}
             activeModality={activeModality}
             onBackToHero={scrollToHero}
             onReplayIntro={handleReplayIntro}

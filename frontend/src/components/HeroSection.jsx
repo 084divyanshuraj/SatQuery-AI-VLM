@@ -5,9 +5,7 @@ import {
   Sparkles, 
   ArrowRightCircle, 
   Eye, 
-  ArrowLeftRight,
-  LogOut,
-  Shield
+  ArrowLeftRight
 } from 'lucide-react';
 
 const SPOTLIGHT_R = 260;
@@ -45,7 +43,7 @@ function RevealLayer({ image, cursorX, cursorY }) {
   );
 }
 
-export default function HeroSection({ currentUser, onLogout, onGetStarted, onSelectModality }) {
+export default function HeroSection({ onGetStarted, onSelectModality }) {
   const [activeCard, setActiveCard] = useState('single');
 
   // Background environment mode: 'nature' (default) or 'antigravity'
@@ -175,9 +173,8 @@ export default function HeroSection({ currentUser, onLogout, onGetStarted, onSel
           </div>
         </div>
 
-        {/* Right Launch Workstation Button & Lock Button */}
+        {/* Right Launch Workstation Button */}
         <div className="flex items-center gap-2.5">
-
           <button
             onClick={onGetStarted}
             className="flex items-center justify-center gap-2 px-5 py-2 rounded-full bg-slate-900/80 hover:bg-emerald-950/90 border border-emerald-400/60 hover:border-emerald-300 text-emerald-300 hover:text-white font-mono text-xs font-bold tracking-wider backdrop-blur-md transition-all duration-300 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.55)] hover:scale-105 whitespace-nowrap shrink-0"
@@ -185,17 +182,6 @@ export default function HeroSection({ currentUser, onLogout, onGetStarted, onSel
             <span>WORKSTATION</span>
             <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
           </button>
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              title="Lock Terminal & Sign Out"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-950/85 hover:bg-red-950/90 border border-white/25 hover:border-red-400/80 text-white/80 hover:text-red-200 text-xs font-mono font-bold transition-all cursor-pointer shadow-md backdrop-blur-md shrink-0"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">LOCK</span>
-            </button>
-          )}
         </div>
       </header>
 

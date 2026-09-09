@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, 
   Download, 
-  Shield, 
   AlertCircle, 
   ChevronLeft, 
   Check, 
@@ -11,17 +10,16 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCw, 
-  Calendar,
-  Clock,
-  Sparkles,
-  Award,
-  Layers,
-  Crosshair,
-  LogOut 
+  Calendar, 
+  Clock, 
+  Sparkles, 
+  Award, 
+  Layers, 
+  Crosshair 
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
 
-export default function Workstation({ currentUser, onLogout, mode: propMode, setMode: propSetMode, activeModality = 'single', onBackToHero, onReplayIntro }) {
+export default function Workstation({ mode: propMode, setMode: propSetMode, activeModality = 'single', onBackToHero, onReplayIntro }) {
   const [internalMode, setInternalMode] = useState(propMode || activeModality || 'single');
   const mode = propMode || internalMode;
   const setMode = propSetMode || setInternalMode;
@@ -719,18 +717,6 @@ export default function Workstation({ currentUser, onLogout, mode: propMode, set
               <span className="hidden sm:inline">{isExporting ? "GENERATING PDF..." : "EXPORT REPORT (PDF)"}</span>
               <span className="sm:hidden">{isExporting ? "PDF..." : "EXPORT"}</span>
             </button>
-
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                title="Lock Station & Sign Out"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-slate-900/80 hover:bg-red-950/80 border border-white/20 hover:border-red-400/70 text-white/70 hover:text-red-200 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm backdrop-blur-md"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">LOCK</span>
-              </button>
-            )}
           </div>
         </header>
 
