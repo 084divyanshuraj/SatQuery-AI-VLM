@@ -34,6 +34,12 @@ const ROTATING_PROMPTS = [
   "Use radar SAR data...",
 ];
 
+const LANGUAGES = [
+  { id: 'en', bcp47: 'en-IN', label: 'English' },
+  { id: 'hi', bcp47: 'hi-IN', label: 'Hindi' },
+  { id: 'te', bcp47: 'te-IN', label: 'Telugu' },
+];
+
 export default function GeoChatbot({
   workstationContext,
   onApplyGrounding,
@@ -275,36 +281,45 @@ export default function GeoChatbot({
     }
 
     try {
-      const payload = {
-        message: query,
-        history: messages.slice(-6).map(m => ({ role: m.role, content: m.text })),
-        language: selectedLang,
-        context: {
-          has_optical_image: Boolean(workstationContext?.opticalImage),
-          has_sar_image: Boolean(workstationContext?.sarImage),
-          mode: workstationContext?.mode || 'single',
-          metadata: workstationContext?.metadata || {},
-          geo_data: workstationContext?.geoData || {},
-          confidence: workstationContext?.confidence,
-          output: workstationContext?.output
-        }
-      };
-
-      let responseData = null;
+            let responseData = null;
 
       try {
-        const res = await fetch(`${backendUrl}/api/chat`, {
+        const imageSrc = workstationContext?.opticalImage || workstationContext?.sarImage;
+        if (!imageSrc) {
+          throw new Error("No image loaded on canvas to send with query.");
+        }
+
+        const imgBlobRes = await fetch(imageSrc);
+        const imgBlob = await imgBlobRes.blob();
+
+        const formData = new FormData();
+        formData.append('query', query);
+        formData.append('image', imgBlob, 'query_image.jpg');
+
+        const res = await fetch(`${backendUrl}/query`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: formData
         });
 
         if (res.ok) {
-          responseData = await res.json();
+          const raw = await res.json();
+          responseData = {
+            reply: raw?.result?.answer || "No answer returned.",
+            confidence: raw?.result?.confidence ? Math.round(raw.result.confidence * 100) : null,
+            intent: raw?.execution_trace?.selected_task,
+            trace_steps: [
+              raw?.execution_trace?.routing_reasoning,
+              `Tool used: ${raw?.execution_trace?.tool_used}`
+            ].filter(Boolean)
+          };
+        } else {
+          throw new Error(`Backend returned status ${res.status}`);
         }
       } catch (networkErr) {
-        console.warn("Backend chat unreachable, engaging client-side fallback:", networkErr);
-      }
+    	console.error("BACKEND CALL FAILED:", networkErr);
+    	responseData = generateClientFallbackResponse(query, workstationContext, selectedLang);
+    	responseData.reply = "⚠️ FALLBACK — " + responseData.reply;
+	}
 
       // If backend was unreachable or returned non-JSON, fallback gracefully
       if (!responseData) {

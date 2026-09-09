@@ -237,7 +237,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
     if (!file) return;
 
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['tif', 'tiff', 'geotiff'].includes(ext)) {
+    if (!['tif', 'tiff', 'geotiff', 'png', 'jpg', 'jpeg'].includes(ext)) {
       setErrorMsg({
         title: "Invalid File Format",
         desc: "SatQuery Agentic framework requires georeferenced GeoTIFF (.tif) format files for active spatial calibration."
@@ -796,7 +796,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                   <input 
                     ref={opticalInputRef}
                     type="file" 
-                    accept=".tif,.tiff,.geotiff" 
+                    accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg"
                     onChange={(e) => handleImport(e, 'optical')} 
                     className="hidden" 
                   />
@@ -828,7 +828,7 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
                     <input 
                       ref={sarInputRef}
                       type="file" 
-                      accept=".tif,.tiff,.geotiff" 
+                      accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg" 
                       onChange={(e) => handleImport(e, 'sar')} 
                       className="hidden" 
                     />
@@ -1164,10 +1164,6 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
               if (replyText) setOutput(replyText);
               if (!opticalImage && !sarImage && !bitemporalAfter) {
                 loadSamplePreset(mode);
-              }
-              if (mode === 'single' && (intent === 'WATER_DETECTION' || (replyText && (replyText.toLowerCase().includes('water') || replyText.includes('जल'))))) {
-                setActiveAnalysisResult('/satellite_assets/river_water_segmented.jpg');
-                setShowAnalysisOverlay(true);
               }
             }}
             onAddTraceLogs={(newLogs) => {
