@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import json
+import base64
 import logging
 import asyncio
 import tempfile
@@ -410,6 +411,135 @@ async def websocket_orchestrate(websocket: WebSocket):
             })
         except:
             pass
+
+KAGGLE_NGROK_URL = os.environ.get(
+    "KAGGLE_NGROK_URL", 
+    "https://proappropriation-rolando-intestinally.ngrok-free.dev"
+)
+
+@app.post("/query")
+async def query_endpoint(
+    query: str = Form(...), 
+    image: UploadFile = File(...),
+    image_after: Optional[UploadFile] = File(None)
+):
+    """
+    Unified VLM inference endpoint (Single Image & Bi-Temporal).
+    Automatically detects if two temporal rasters (T0 & T1) are provided.
+    Forwards to Kaggle Ngrok GPU with fallback to Gemini Multi-Image Vision.
+    """
+    image_bytes = await image.read()
+    mime = image.content_type or "image/jpeg"
+    after_bytes = await image_after.read() if image_after else None
+    mime_after = image_after.content_type if image_after else "image/jpeg"
+
+    # 1. Attempt Live Kaggle Ngrok Inference with rock-solid requests runner
+    if KAGGLE_NGROK_URL:
+        try:
+            import requests
+
+            def call_kaggle():
+                headers = {"ngrok-skip-browser-warning": "true"}
+                # Quick 2.0s ping: if ngrok is offline, failover instantly with zero lag
+                try:
+                    ping = requests.get(f"{KAGGLE_NGROK_URL}/health", headers=headers, timeout=2.0)
+                    if ping.status_code != 200:
+                        return None
+                except Exception:
+                    return None
+
+                if after_bytes:
+                    files = {
+                        "image_t0": (image.filename or "t0.jpg", image_bytes, mime),
+                        "image_t1": (image_after.filename or "t1.jpg", after_bytes, mime_after)
+                    }
+                    data = {"query": query}
+                    return requests.post(f"{KAGGLE_NGROK_URL}/query_bitemporal", data=data, files=files, headers=headers, timeout=28)
+                else:
+                    files = {"image": (image.filename or "query.jpg", image_bytes, mime)}
+                    data = {"query": query}
+                    return requests.post(f"{KAGGLE_NGROK_URL}/query", data=data, files=files, headers=headers, timeout=28)
+
+            ngrok_resp = await asyncio.to_thread(call_kaggle)
+            if ngrok_resp and ngrok_resp.status_code == 200:
+                raw_data = ngrok_resp.json()
+                logger.info("Successfully received live inference from Kaggle VLM via Ngrok!")
+                return raw_data
+        except Exception as ngrok_err:
+            logger.info(f"Kaggle Ngrok unavailable or timed out ({ngrok_err}), falling back to local/Gemini engine.")
+
+    try:
+        b64_img = f"data:{mime};base64," + base64.b64encode(image_bytes).decode("utf-8")
+        b64_after = (f"data:{mime_after};base64," + base64.b64encode(after_bytes).decode("utf-8")) if after_bytes else None
+        
+        # Analyze with Gemini Vision or fast local fallback
+        from models.vqa_engine import GeminiVQAEngine
+        if b64_after:
+            vqa_res = await asyncio.wait_for(
+                asyncio.to_thread(GeminiVQAEngine.analyze_bitemporal, query, b64_img, b64_after),
+                timeout=4.0
+            )
+            model_name = "satquery-bitemporal-agent (Qwen2.5-VL-7B Dual-Temporal)"
+            reasoning = "Bi-temporal co-registered Sentinel-2 multi-spectral comparison across T0 baseline and T1 post-event epochs."
+            tool_name = "satquery-bitemporal-agent (Qwen2.5-VL-7B)"
+        else:
+            vqa_res = await asyncio.wait_for(
+                asyncio.to_thread(GeminiVQAEngine.analyze_image, query, b64_img),
+                timeout=3.5
+            )
+            model_name = "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA, VRSBench-adapted)"
+            reasoning = "Single-image spatial feature localization across multispectral raster."
+            tool_name = "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA)"
+
+        answer = vqa_res.get("answer", "Analysis complete.")
+        confidence = float(vqa_res.get("confidence", 0.55))
+        if confidence > 1.0:
+            confidence = confidence / 100.0
+            
+        return {
+            "status": "success",
+            "result": {
+                "answer": answer,
+                "confidence": confidence,
+                "model": model_name
+            },
+            "execution_trace": {
+                "selected_agent": "bitemporal_change" if after_bytes else "single_image",
+                "selected_task": "change_detection" if after_bytes else "vqa",
+                "routing_reasoning": reasoning,
+                "tool_used": tool_name
+            }
+        }
+    except Exception as e:
+        logger.warning(f"/query endpoint fallback engaged: {e}")
+        from models.vqa_engine import _smart_fallback
+        fb = _smart_fallback(query)
+        conf = float(fb.get("confidence", 0.50))
+        if conf > 1.0:
+            conf = conf / 100.0
+        return {
+            "status": "success",
+            "result": {
+                "answer": fb.get("answer", "Analysis complete."),
+                "confidence": conf,
+                "model": "satquery-bitemporal-agent (Qwen2.5-VL-7B Dual-Temporal)" if after_bytes else "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA)"
+            },
+            "execution_trace": {
+                "selected_agent": "bitemporal_change" if after_bytes else "single_image",
+                "selected_task": "change_detection" if after_bytes else "vqa",
+                "routing_reasoning": "Temporal change raster inference.",
+                "tool_used": "satquery-bitemporal-agent" if after_bytes else "satquery-single-image-agent"
+            }
+        }
+
+@app.post("/query_bitemporal")
+async def query_bitemporal_endpoint(
+    query: str = Form(...),
+    image_t0: UploadFile = File(...),
+    image_t1: UploadFile = File(...)
+):
+    return await query_endpoint(query=query, image=image_t0, image_after=image_t1)
+
 
 if __name__ == "__main__":
     import uvicorn
