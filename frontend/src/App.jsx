@@ -1,82 +1,244 @@
 import React, { useState, useEffect } from 'react';
 import HeroSection from './components/HeroSection.jsx';
+import ModelShowcase from './components/ModelShowcase.jsx';
+import ModelDetailPage from './components/ModelDetailPage.jsx';
+import MissionHub from './components/MissionHub.jsx';
 import Workstation from './components/Workstation.jsx';
-import IsroLoadingSequence from './components/IsroLoadingSequence.jsx';
+import LoginPage from './components/LoginPage.jsx';
+import Footer from './components/Footer.jsx';
 
 export default function App() {
-  const [isLoadingComplete, setIsLoadingComplete] = useState(() => {
+  const defaultUser = {
+    name: 'Dr. Vikram S. Rao',
+    rank: 'Level-4 Senior Geospatial Commander',
+    clearance: 'ISRO SAC Level-4 Orbital Access'
+  };
+
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('nointro') === '1' || params.get('skip_intro') === '1') {
-        const cleanUrl = window.location.pathname + (window.location.hash || '');
-        window.history.replaceState({}, document.title, cleanUrl);
-        return true;
+      const stored = localStorage.getItem('satquery_auth');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
-    return false;
+    return null;
+  });
+
+  const [currentRoute, setCurrentRoute] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('satquery_auth');
+      if (stored) {
+        return 'hub'; // Authenticated users land directly in Mission Control Hub
+      }
+    }
+    return 'home'; // Unauthenticated guests start at the public landing page
   });
 
   const [activeModality, setActiveModality] = useState('single');
+  const [selectedModelDetail, setSelectedModelDetail] = useState(null);
 
-  const scrollToWorkstation = (modality = null) => {
-    if (modality) {
-      setActiveModality(modality);
+  // Authentication Handlers
+  const handleLoginSuccess = (user) => {
+    setAuthenticatedUser(user);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('satquery_auth', JSON.stringify(user));
     }
-    const targetElement = document.getElementById('workstation-viewport');
-    if (targetElement) {
-      targetElement.scrollIntoView({ behavior: 'smooth' });
-    }
+    setCurrentRoute('hub'); // Directly enter Mission Control Hub post-login
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const scrollToHero = () => {
-    const heroElement = document.getElementById('hero-viewport');
-    if (heroElement) {
-      heroElement.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleLogout = () => {
+    setAuthenticatedUser(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('satquery_auth');
     }
+    setCurrentRoute('home');
+    setSelectedModelDetail(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleReplayIntro = () => {
-    setIsLoadingComplete(false);
-  };
-
-  useEffect(() => {
-    if (window.location.hash === '#workstation-viewport' || window.location.search.includes('view=workstation')) {
+  // Launch Workstation from Hub or Preset with specific modality
+  const handleLaunchWorkstation = (modalityId = 'single') => {
+    setActiveModality(modalityId);
+    if (!authenticatedUser) {
+      setCurrentRoute('login');
+      return;
+    }
+    setCurrentRoute('hub');
+    setTimeout(() => {
       const el = document.getElementById('workstation-viewport');
       if (el) {
-        window.scrollTo({ top: el.offsetTop, behavior: 'auto' });
+        el.scrollIntoView({ behavior: 'smooth' });
       }
+    }, 50);
+  };
+
+  const handleSelectModel = (modelId) => {
+    setSelectedModelDetail(modelId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackFromDetail = () => {
+    setSelectedModelDetail(null);
+    setTimeout(() => {
+      const el = document.getElementById('models-showcase');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
+  const handleLaunchFromDetail = (modelId) => {
+    setSelectedModelDetail(null);
+    const modalityMap = {
+      vqa: 'single',
+      bitemporal: 'bitemporal',
+      crossmodal: 'crossmodal'
+    };
+    const targetModality = modalityMap[modelId] || 'single';
+    setActiveModality(targetModality);
+
+    if (authenticatedUser) {
+      setCurrentRoute('hub');
+      setTimeout(() => {
+        const el = document.getElementById('workstation-viewport');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 50);
+    } else {
+      setCurrentRoute('login');
     }
-  }, []);
+  };
 
+  // =========================================================================
+  // VIEW 1: LOGIN PORTAL (Cosmic Split Screen)
+  // =========================================================================
+  if (currentRoute === 'login') {
+    return (
+      <LoginPage 
+        onLoginSuccess={handleLoginSuccess} 
+        onBack={() => setCurrentRoute('home')}
+      />
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: DEDICATED MODEL DETAIL DEEP-DIVE
+  // =========================================================================
+  if (selectedModelDetail) {
+    return (
+      <ModelDetailPage 
+        modelId={selectedModelDetail}
+        onBack={handleBackFromDetail}
+        onLaunchInWorkstation={handleLaunchFromDetail}
+        isAuthenticated={!!authenticatedUser}
+      />
+    );
+  }
+
+  // =========================================================================
+  // VIEW 3: AUTHENTICATED COMMAND CONSOLE + WORKSTATION (Directly on Scroll)
+  // =========================================================================
+  if (currentRoute === 'hub' || currentRoute === 'workstation') {
+    if (!authenticatedUser) {
+      return (
+        <LoginPage 
+          onLoginSuccess={handleLoginSuccess} 
+          onBack={() => setCurrentRoute('home')}
+        />
+      );
+    }
+
+    const scrollToWorkstation = () => {
+      const el = document.getElementById('workstation-viewport');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    };
+
+    const scrollToHub = () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    return (
+      <div className="w-full min-h-screen bg-aurora-animated text-slate-100 overflow-x-hidden scroll-smooth flex flex-col">
+        {/* Section 1: Command Hub (Cleaned without Images 1, 3, 4, 5) */}
+        <MissionHub 
+          currentUser={authenticatedUser}
+          onLaunchWorkstation={(modalityId) => {
+            setActiveModality(modalityId);
+            setTimeout(scrollToWorkstation, 50);
+          }}
+          onScrollToWorkstation={scrollToWorkstation}
+          onLogout={handleLogout}
+          onViewPortal={() => setCurrentRoute('home')}
+        />
+
+        {/* Section 2: Interactive Geospatial Workstation (Image 2: Reached directly on scroll) */}
+        <Workstation 
+          currentUser={authenticatedUser}
+          activeModality={activeModality}
+          onBackToHub={scrollToHub}
+          onBackToHero={() => setCurrentRoute('home')}
+          isAuthenticated={true}
+          onLogoutClick={handleLogout}
+        />
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 5: PUBLIC LANDING FLOW (Clean Hero -> Model Showcase -> Footer)
+  // =========================================================================
   return (
-    <div className="w-full min-h-screen bg-[#020617] text-slate-100 overflow-x-hidden">
-      {/* 1. Cinematic ISRO Satellite Ground-Station Loading Sequence */}
-      {!isLoadingComplete && (
-        <IsroLoadingSequence onComplete={() => {
-          setIsLoadingComplete(true);
-          window.scrollTo({ top: 0, behavior: 'instant' });
-        }} />
-      )}
+    <div className="w-full min-h-screen bg-aurora-animated text-slate-100 overflow-x-hidden flex flex-col">
+      {/* Viewport 1: Space Entry Portal Landing Page (Cleaned Hero) */}
+      <HeroSection 
+        currentUser={authenticatedUser || defaultUser}
+        isAuthenticated={!!authenticatedUser}
+        onLoginClick={() => {
+          if (authenticatedUser) {
+            setCurrentRoute('hub');
+          } else {
+            setCurrentRoute('login');
+          }
+        }}
+        onLogoutClick={handleLogout}
+        onGetStarted={() => {
+          if (authenticatedUser) {
+            setCurrentRoute('hub');
+          } else {
+            const el = document.getElementById('models-showcase');
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth' });
+            }
+          }
+        }}
+        onSelectModality={(modalityId) => {
+          setActiveModality(modalityId);
+          if (authenticatedUser) {
+            setCurrentRoute('hub');
+          } else {
+            setCurrentRoute('login');
+          }
+        }}
+      />
 
-      {/* 2. Direct Workstation & Portal Access (No Login Gate) */}
-      {isLoadingComplete && (
-        <>
-          {/* Viewport 1: Space Entry Portal Landing Page */}
-          <HeroSection 
-            onGetStarted={() => scrollToWorkstation()}
-            onSelectModality={(modalityId) => scrollToWorkstation(modalityId)}
-          />
+      {/* Section 2: AI Foundation Models Showcase in Row */}
+      <ModelShowcase 
+        onSelectModel={handleSelectModel}
+      />
 
-          {/* Viewport 2: Single-Viewport 3-Pane Engineering Workstation */}
-          <Workstation 
-            activeModality={activeModality}
-            onBackToHero={scrollToHero}
-            onReplayIntro={handleReplayIntro}
-          />
-        </>
-      )}
+      {/* Section 3: Comprehensive Futuristic Footer */}
+      <Footer 
+        onSelectModel={handleSelectModel}
+        onScrollToTop={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      />
     </div>
   );
 }
