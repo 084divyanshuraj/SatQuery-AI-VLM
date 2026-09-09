@@ -5,10 +5,6 @@ import json
 import logging
 import asyncio
 import tempfile
-import urllib.request
-import sqlite3
-import hashlib
-from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,9 +15,19 @@ from pydantic import BaseModel
 
 # Import local geospatial controller and pdf generator
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Load .env file so Gemini API keys are available as environment variables
+try:
+    from dotenv import load_dotenv
+    # Look for .env in the project root (one level above backend/)
+    dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env')
+    load_dotenv(dotenv_path=dotenv_path)
+    logger_temp = logging.getLogger("startup")
+except ImportError:
+    pass
+
 from controller import SatQueryController
 from pdf_generator import generate_report_pdf
-from geo_nlp import generate_grounded_response, SUPPORTED_LANGUAGES
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -73,185 +79,6 @@ class CompatibilityCheckRequest(BaseModel):
     meta_a: Dict[str, Any]
     meta_b: Dict[str, Any]
 
-class ChatRequest(BaseModel):
-    message: str
-    history: List[Dict[str, str]] = []
-    language: str = "auto"
-    context: Dict[str, Any] = {}
-
-class LoginRequest(BaseModel):
-    identifier: str
-    password: str
-
-class RegisterRequest(BaseModel):
-    callsign: str
-    email: str
-    password: str
-    full_name: str
-    department: Optional[str] = "Geospatial Intelligence Unit"
-    clearance_level: Optional[str] = "LEVEL 2 - MISSION ANALYST"
-
-# --- SQLite Database Initialization for Tactical User Auth ---
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "users.db")
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-def init_user_db():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                callsign TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                full_name TEXT NOT NULL,
-                clearance_level TEXT NOT NULL,
-                department TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        # Seed default ISRO Senior Analyst account if not exists
-        cursor.execute("SELECT id FROM users WHERE callsign = 'ISRO-ANALYST'")
-        if not cursor.fetchone():
-            demo_pwd_hash = hashlib.sha256("isro2026".encode()).hexdigest()
-            cursor.execute("""
-                INSERT INTO users (callsign, email, password_hash, full_name, clearance_level, department)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                "ISRO-ANALYST",
-                "analyst.sih26167@isro.gov.in",
-                demo_pwd_hash,
-                "Dr. Vikram S. Rao",
-                "LEVEL 4 - SENIOR GEOSPATIAL COMMAND",
-                "Space Applications Centre (SAC-ISRO)"
-            ))
-        conn.commit()
-        conn.close()
-        logger.info("Tactical User Authentication SQLite Database initialized successfully.")
-    except Exception as e:
-        logger.error(f"Error initializing users database: {e}")
-
-init_user_db()
-
-# --- Authentication Endpoints ---
-@app.post("/api/auth/login")
-async def auth_login(req: LoginRequest):
-    """
-    Authenticates an officer by Callsign/Email and Security Key,
-    or provides frictionless 1-Click evaluation access for hackathon evaluators.
-    """
-    ident = req.identifier.strip()
-    pwd = req.password.strip()
-
-    # Frictionless Demo Access for Hackathon Evaluators
-    if ident.lower() in ["demo", "isro", "isro-analyst", "guest", "evaluator"] or pwd.lower() == "demo":
-        return {
-            "status": "success",
-            "token": "satquery_token_demo_isro_clearance",
-            "user": {
-                "id": 1,
-                "callsign": "ISRO-ANALYST",
-                "email": "analyst.sih26167@isro.gov.in",
-                "full_name": "Dr. Vikram S. Rao",
-                "clearance_level": "LEVEL 4 - SENIOR GEOSPATIAL COMMAND",
-                "department": "Space Applications Centre (SAC-ISRO)",
-                "mission_id": "SIH-PS-26167"
-            }
-        }
-
-    pwd_hash = hashlib.sha256(pwd.encode()).hexdigest()
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, callsign, email, password_hash, full_name, clearance_level, department 
-            FROM users 
-            WHERE (LOWER(callsign) = LOWER(?) OR LOWER(email) = LOWER(?))
-        """, (ident, ident))
-        row = cursor.fetchone()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=401, detail="Security clearance rejected. Invalid Callsign or Email.")
-
-        if row["password_hash"] != pwd_hash:
-            raise HTTPException(status_code=401, detail="Authentication failed. Incorrect Security Key.")
-
-        return {
-            "status": "success",
-            "token": f"satquery_token_{row['id']}_{int(datetime.now().timestamp())}",
-            "user": {
-                "id": row["id"],
-                "callsign": row["callsign"],
-                "email": row["email"],
-                "full_name": row["full_name"],
-                "clearance_level": row["clearance_level"],
-                "department": row["department"],
-                "mission_id": "SIH-PS-26167"
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Login database error: {e}")
-        raise HTTPException(status_code=500, detail="Tactical Auth Core database failure.")
-
-@app.post("/api/auth/register")
-async def auth_register(req: RegisterRequest):
-    """
-    Registers a new geospatial intelligence officer into the SQLite database.
-    """
-    callsign = req.callsign.strip().upper()
-    email = req.email.strip().lower()
-    pwd_hash = hashlib.sha256(req.password.strip().encode()).hexdigest()
-
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO users (callsign, email, password_hash, full_name, clearance_level, department)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (callsign, email, pwd_hash, req.full_name.strip(), req.clearance_level, req.department))
-        user_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        return {
-            "status": "success",
-            "token": f"satquery_token_{user_id}_{int(datetime.now().timestamp())}",
-            "user": {
-                "id": user_id,
-                "callsign": callsign,
-                "email": email,
-                "full_name": req.full_name.strip(),
-                "clearance_level": req.clearance_level,
-                "department": req.department,
-                "mission_id": "SIH-PS-26167"
-            }
-        }
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=409, detail="Callsign or Email is already registered in clearance registry.")
-    except Exception as e:
-        logger.error(f"Registration database error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to register officer credentials.")
-
-@app.get("/api/auth/me")
-async def auth_me():
-    """Returns the default active officer profile."""
-    return {
-        "status": "active",
-        "user": {
-            "callsign": "ISRO-ANALYST",
-            "email": "analyst.sih26167@isro.gov.in",
-            "full_name": "Dr. Vikram S. Rao",
-            "clearance_level": "LEVEL 4 - SENIOR GEOSPATIAL COMMAND",
-            "department": "Space Applications Centre (SAC-ISRO)",
-            "mission_id": "SIH-PS-26167"
-        }
-    }
-
 # --- REST Endpoints ---
 @app.get("/")
 async def root():
@@ -261,40 +88,8 @@ async def root():
         "status": "online",
         "service": "SatQuery AI Remote Sensing Orchestrator Backend",
         "rasterio_available": rasterio_avail,
-        "endpoints": ["/api/health", "/api/upload", "/api/check_compatibility", "/api/chat", "/api/export_pdf", "/api/performance_metrics", "/ws/orchestrate"]
+        "endpoints": ["/api/health", "/api/upload", "/api/check_compatibility", "/api/query", "/api/export_pdf", "/api/performance_metrics", "/ws/orchestrate"]
     }
-
-@app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest):
-    """
-    Multilingual multimodal geospatial assistant endpoint.
-    Performs intent recognition, state grounding, and technical response generation.
-    """
-    try:
-        response = generate_grounded_response(
-            query=request.message,
-            history=request.history,
-            context=request.context,
-            selected_language=request.language
-        )
-        return response
-    except Exception as e:
-        logger.error(f"Chat processing error: {e}")
-        return {
-            "reply": "Error evaluating geospatial query. Please verify workstation telemetry and active imagery.",
-            "intent": "ERROR",
-            "detected_language": request.language,
-            "grounded": False,
-            "action_trigger": None,
-            "trace_steps": [f"Error encountered in geospatial reasoning kernel: {str(e)}"],
-            "grounding_boxes": None,
-            "confidence": None
-        }
-
-@app.get("/api/chat/languages")
-async def get_supported_languages():
-    """Returns supported Indic and international language configurations."""
-    return SUPPORTED_LANGUAGES
 
 @app.post("/api/check_compatibility")
 async def check_compatibility(payload: CompatibilityCheckRequest):
@@ -312,57 +107,6 @@ async def health():
         "gpu_acceleration": "available",
         "engine": "FastAPI + PyTorch / NumPy / Rasterio Geospatial Kernel",
         "ps_id": "SIH PS-26167"
-    }
-
-@app.get("/api/system/time-location")
-async def get_system_time_location():
-    """
-    Returns genuine real-time UTC/Local timestamps and network geolocation
-    to power live chronological and geospatial displays across the workstation.
-    """
-    now_utc = datetime.now(timezone.utc)
-    now_local = datetime.now()
-    
-    geo_data = {
-        "status": "active",
-        "city": "Hyderabad",
-        "region": "Telangana",
-        "country": "India",
-        "country_code": "IN",
-        "lat": 17.3843,
-        "lon": 78.4583,
-        "timezone": "Asia/Kolkata",
-        "isp": "National Remote Sensing Centre / Direct Uplink"
-    }
-    
-    try:
-        req = urllib.request.Request(
-            "http://ip-api.com/json",
-            headers={"User-Agent": "SatQuery-GIS-Telemetry/1.0"}
-        )
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            data = json.loads(resp.read().decode())
-            if data.get("status") == "success":
-                geo_data = {
-                    "status": "live",
-                    "city": data.get("city", "Local Node"),
-                    "region": data.get("regionName", ""),
-                    "country": data.get("country", ""),
-                    "country_code": data.get("countryCode", ""),
-                    "lat": float(data.get("lat", 17.3843)),
-                    "lon": float(data.get("lon", 78.4583)),
-                    "timezone": data.get("timezone", "Asia/Kolkata"),
-                    "isp": data.get("isp", "Direct Uplink"),
-                    "ip": data.get("query", "")
-                }
-    except Exception as e:
-        logger.warning(f"IP Geo lookup: {e}")
-        
-    return {
-        "utc_iso": now_utc.isoformat(),
-        "local_iso": now_local.isoformat(),
-        "epoch_ms": int(now_utc.timestamp() * 1000),
-        "geolocation": geo_data
     }
 
 @app.get("/api/performance_metrics")
@@ -518,9 +262,21 @@ async def websocket_orchestrate(websocket: WebSocket):
             
             logger.info(f"Received request: Mode=[{mode}] Query='{query}'")
             
+            # Call the Agentic Router
+            from agentic_router import SatQueryRouter
+            routing_decision = SatQueryRouter.route_query(query)
+            
+            # Stream the router's decision to the frontend terminal
+            await websocket.send_json({
+                "type": "log",
+                "step": 0,
+                "message": f"[AGENTIC CONTROLLER] Task Classified: {routing_decision.task.value} | Confidence: {routing_decision.confidence}% | Reasoning: {routing_decision.reasoning}"
+            })
+            await asyncio.sleep(0.8)
+            
             # Check if query is training/epoch/adaptation related
             is_training_query = any(kw in query.lower() for kw in ["train", "pipeline", "epoch", "fine-tune", "adaptation", "learn", "fit"])
-            is_flood_context = ("flood" in query.lower() or "breach" in query.lower() or "inundation" in query.lower() or "water" in query.lower() or mode == "crossmodal")
+            is_flood_context = routing_decision.is_flood_related or mode == "crossmodal"
             
             if is_training_query:
                 # Stream custom PyTorch BigEarthNet adaptation epochs
@@ -582,77 +338,56 @@ async def websocket_orchestrate(websocket: WebSocket):
                     {"label": "ALIGNED OPTICAL-SAR REGION #01", "confidence": "98.4%", "x": 20, "y": 20, "width": 60, "height": 60}
                 ]
             else:
-                if is_flood_context:
-                    logs_sequence = [
-                        "Ingesting co-registered Sentinel-1 SAR GRD and Sentinel-2 MSI rasters for AOI [EPSG:32643].",
-                        "Applying radiometric calibration, speckle Lee-filtering (5x5 kernel), and terrain flattening.",
-                        "Computing Normalized Difference Water Index (NDWI = (Green - NIR) / (Green + NIR)).",
-                        "Extracting SAR backscatter threshold (VV < -14.8 dB) for cloud-penetrating water delineation."
-                    ]
+                image_data = payload.get("image")
+                tag_str = "Gemini Vision"
+
+                # Step 1: Gemini VQA
+                from models.vqa_engine import GeminiVQAEngine
+                await websocket.send_json({"type": "log", "step": 1, "message": "Dispatching image and query to Gemini Multimodal Vision Engine..."})
+                await asyncio.sleep(0.2)
+
+                await websocket.send_json({"type": "log", "step": 2, "message": "Gemini Vision processing spatial context and spectral features..."})
+                await asyncio.sleep(0.2)
+
+                if image_data:
+                    vqa_response = GeminiVQAEngine.analyze_image(query, image_data)
                 else:
-                    logs_sequence = [
-                        "Establishing geospatial session. Initializing active coordinate validation sequence...",
-                        "Query interpreted: Extracting intent tokens and targeting spatial domain adaptation indices...",
-                        "Orchestrator decision: Dispatching Sentinel-2 Multisensor Transformer Core...",
-                        "Model Execution: Evaluating BigEarthNet.txt adapted visual-semantic representation spaces...",
-                        "Applying Spatial Grounding Matrix: Extracting bounding coordinates and computing confidence limits..."
-                    ]
-                
-                for index, log_msg in enumerate(logs_sequence):
-                    await websocket.send_json({
-                        "type": "log",
-                        "step": index + 1,
-                        "message": log_msg
-                    })
-                    await asyncio.sleep(0.35)
-                
-                if is_flood_context:
-                    answer = "Severe inundation confirmed along the northern floodplain with 3 primary breach clusters. Synthetic Aperture Radar confirms standing water under cloud obstruction."
-                    confidence = 98.4
-                    extra_data = {
-                        "is_flood_report": True,
-                        "report_title": "Flood Inundation Grounding Report",
-                        "alert_level": "CRITICAL ALERT",
-                        "mission_id": "ISRO-SAC-26167",
-                        "extent_area": "1,420.5 ha",
-                        "time_utc": "11:58:39 UTC",
-                        "confidence": "98.4%"
+                    vqa_response = {
+                        "answer": "No image provided. Please upload a satellite image first.",
+                        "confidence": 0.0,
+                        "grounding_box": {}
                     }
-                    grounding_boxes = [
-                        {"label": "FLOOD BREACH #01", "confidence": "98.7%", "x": 32, "y": 38, "width": 22, "height": 18},
-                        {"label": "SUBMERGED INFRA #02", "confidence": "97.2%", "x": 58, "y": 48, "width": 16, "height": 18},
-                        {"label": "RESIDENTIAL RISK #03", "confidence": "99.1%", "x": 40, "y": 64, "width": 15, "height": 16}
-                    ]
-                elif mode == "bitemporal":
-                    answer = "Bi-temporal change detection successfully completed. Analysis identifies an urban built-up expansion of approximately 14.2% along the eastern spatial boundaries. Natural vegetation cover exhibits expected seasonal variations. Riverbed coordinates remain fully stable."
-                    confidence = 96.5
-                    extra_data = {
-                        "is_flood_report": True,
-                        "report_title": "Bi-Temporal Change Detection Report",
-                        "alert_level": "URBAN GROWTH DETECTED",
-                        "mission_id": "ISRO-SAC-26167",
-                        "extent_area": "342.8 ha",
-                        "time_utc": "12:15:22 UTC",
-                        "confidence": "96.5%"
-                    }
-                    grounding_boxes = [
-                        {"label": "URBAN EXPANSION #01", "confidence": "96.5%", "x": 32, "y": 28, "width": 42, "height": 38}
-                    ]
+
+                await websocket.send_json({"type": "log", "step": 3, "message": "Visual analysis complete. Generating bounding coordinates and report..."})
+                await asyncio.sleep(0.2)
+
+                answer = vqa_response.get("answer", "Unknown")
+                confidence = vqa_response.get("confidence", 85.0)
+                raw_box = vqa_response.get("grounding_box", {})
+
+                # Handle both Pydantic model objects and plain dicts
+                if hasattr(raw_box, "model_dump"):
+                    g_box = raw_box.model_dump()
+                elif hasattr(raw_box, "__dict__"):
+                    g_box = raw_box.__dict__
                 else:
-                    answer = "Single-baseline visual reasoning completed. Segmented region maps water containment structures measuring 2.4 hectares. Active crop coverage index evaluates to 0.76 (NDVI optimal threshold limit)."
-                    confidence = 94.2
-                    extra_data = {
-                        "is_flood_report": True,
-                        "report_title": "Single Baseline Vegetation Index Report",
-                        "alert_level": "OPTIMAL VEGETATION",
-                        "mission_id": "ISRO-SAC-26167",
-                        "extent_area": "2.4 ha",
-                        "time_utc": "23:29:16 UTC",
-                        "confidence": "94.2%"
-                    }
-                    grounding_boxes = [
-                        {"label": "CENTER-PIVOT CANOPY: WINTER WHEAT (NDVI: 0.76)", "confidence": "94.2%", "x": 39, "y": 36, "width": 33, "height": 26}
-                    ]
+                    g_box = raw_box if isinstance(raw_box, dict) else {}
+
+                extra_data = {
+                    "is_flood_report": routing_decision.is_flood_related,
+                    "report_title": "AI Spatial Reasoning Report",
+                    "alert_level": "AI ANALYSIS COMPLETE",
+                    "mission_id": "GEMINI-VISION-ENGINE",
+                    "extent_area": f"Model: {tag_str}",
+                    "time_utc": "LIVE INFERENCE",
+                    "confidence": f"{confidence}%"
+                }
+
+                grounding_boxes = []
+                if g_box and "x" in g_box:
+                    g_box["confidence"] = f"{round(confidence, 1)}%"
+                    grounding_boxes.append(g_box)
+
                 
             await websocket.send_json({
                 "type": "result",
