@@ -397,8 +397,23 @@ def dispatch_trained_vlm_query(
             data = {"query": query}
             resp = requests.post(f"{active_url}/query_bitemporal", data=data, files=files, headers=headers, timeout=28)
         else:
+            # If the user asks an open-ended scene inspection/overview question like:
+            # "whats there in this image", "tell me what is in this image", "explain what all is here",
+            # The fine-tuned VQA branch default outputs a terse class label like "urban area".
+            # Formatting as a detailed scene request triggers the fine-tuned captioning head!
+            vlm_query = query
+            q_lower = (query or "").lower().strip()
+            overview_triggers = [
+                "whats there", "what's there", "what is there", "what all", 
+                "tell me what", "explain what", "expalin", "explan", "overview", 
+                "describe", "what do you see", "what is in this"
+            ]
+            exclude_keywords = ["yes or no", "count", "how many", "is there", "are there", "does this", "color"]
+            if any(t in q_lower for t in overview_triggers) and not any(e in q_lower for e in exclude_keywords):
+                vlm_query = f"Describe what is in this image in detail: {query}"
+
             files = {"image": ("query.jpg", image_bytes, mime)}
-            data = {"query": query}
+            data = {"query": vlm_query}
             resp = requests.post(f"{active_url}/query", data=data, files=files, headers=headers, timeout=28)
 
         if resp and resp.status_code == 200:
