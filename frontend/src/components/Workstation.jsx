@@ -715,35 +715,48 @@ export default function Workstation({
 
       if (!response.ok) throw new Error("PDF generation failed with status: " + response.status);
 
-      const rawBlob = await response.blob();
-      const pdfBlob = new Blob([rawBlob], { type: "application/pdf" });
-      const downloadUrl = window.URL.createObjectURL(pdfBlob);
-      const fileName = `satquery-executive-report-${Date.now()}.pdf`;
+      // Extract generated filename and direct server routes
+      const reportFilename = response.headers.get("X-Report-Filename") || `SatQuery_Executive_Report_${Date.now()}.pdf`;
+      const directDownloadUrl = `${BACKEND_HTTP}/api/reports/${reportFilename}/download`;
+      const directViewUrl = `${BACKEND_HTTP}/api/reports/${reportFilename}/view`;
 
+      // 1. Direct native download from genuine server HTTP endpoint (never blocked by Chrome blob security)
       const downloadLink = document.createElement("a");
       downloadLink.style.display = "none";
-      downloadLink.href = downloadUrl;
-      downloadLink.setAttribute("download", fileName);
-      downloadLink.download = fileName;
+      downloadLink.href = directDownloadUrl;
+      downloadLink.setAttribute("download", reportFilename);
+      downloadLink.download = reportFilename;
       document.body.appendChild(downloadLink);
       downloadLink.click();
 
-      setPdfStatusToast({ type: 'success', message: 'White A4 PDF Report Downloaded!' });
-      setTimeout(() => setPdfStatusToast(null), 3500);
+      // 2. Also open directly in a new tab so user can immediately view/verify the white A4 PDF document!
+      try {
+        window.open(directViewUrl, '_blank');
+      } catch (openErr) {
+        console.warn("Popup notice:", openErr);
+      }
 
-      // Delay cleanup to allow browser download manager to complete saving with proper filename and extension
+      setPdfStatusToast({ 
+        type: 'success', 
+        message: 'White A4 PDF Report Ready!',
+        filename: reportFilename,
+        viewUrl: directViewUrl,
+        downloadUrl: directDownloadUrl
+      });
+      setTimeout(() => setPdfStatusToast(null), 8000);
+
+      // Delay cleanup
       setTimeout(() => {
         try {
           if (downloadLink.parentNode) {
             downloadLink.parentNode.removeChild(downloadLink);
           }
-          window.URL.revokeObjectURL(downloadUrl);
         } catch (cleanupErr) {
-          // ignore cleanup errors
+          // ignore
         }
-      }, 20000);
+      }, 10000);
     } catch (err) {
-      console.warn("PDF API export fallback:", err);
+      console.warn("PDF API export error:", err);
       setPdfStatusToast({ type: 'error', message: 'PDF Generation failed. Please try again.' });
       setTimeout(() => setPdfStatusToast(null), 4000);
     } finally {
@@ -761,7 +774,7 @@ export default function Workstation({
         <div 
           id="pdf-status-toast"
           data-testid="pdf-status-toast"
-          className={`absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl backdrop-blur-xl border flex items-center gap-2.5 text-xs font-bold shadow-2xl animate-fadeIn ${
+          className={`absolute top-16 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-2xl backdrop-blur-2xl border flex items-center gap-3 text-xs font-bold shadow-2xl animate-fadeIn ${
             pdfStatusToast.type === 'error'
               ? 'bg-rose-950/95 border-rose-500/60 text-rose-200'
               : pdfStatusToast.type === 'success'
@@ -769,17 +782,37 @@ export default function Workstation({
               : 'bg-[#12131C]/95 border-[#8B5CF6]/50 text-white'
           }`}
         >
-          {pdfStatusToast.type === 'loading' && <span className="w-3 h-3 border-2 border-[#EC4899] border-t-transparent rounded-full animate-spin" />}
-          {pdfStatusToast.type === 'success' && <Check className="w-4 h-4 text-[#10B981]" />}
-          {pdfStatusToast.type === 'error' && <AlertCircle className="w-4 h-4 text-[#F43F5E]" />}
-          <span>{pdfStatusToast.message}</span>
+          {pdfStatusToast.type === 'loading' && <span className="w-3.5 h-3.5 border-2 border-[#EC4899] border-t-transparent rounded-full animate-spin shrink-0" />}
+          {pdfStatusToast.type === 'success' && <Check className="w-4 h-4 text-[#10B981] shrink-0" />}
+          {pdfStatusToast.type === 'error' && <AlertCircle className="w-4 h-4 text-[#F43F5E] shrink-0" />}
+          <span className="tracking-wide">{pdfStatusToast.message}</span>
+
+          {pdfStatusToast.viewUrl && (
+            <div className="flex items-center gap-2 ml-2 pl-3 border-l border-emerald-500/40">
+              <a 
+                href={pdfStatusToast.viewUrl} 
+                target="_blank" 
+                rel="noreferrer"
+                className="px-3 py-1 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/50 transition cursor-pointer text-[11px] font-bold shadow-sm"
+              >
+                Open in Tab
+              </a>
+              <a 
+                href={pdfStatusToast.downloadUrl}
+                download={pdfStatusToast.filename}
+                className="px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition cursor-pointer text-[11px] font-bold shadow-sm"
+              >
+                Save File (.pdf)
+              </a>
+            </div>
+          )}
         </div>
       )}
 
       {recenterToast && (
         <div 
           id="recenter-toast"
-          className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-xl bg-[#08090C]/95 border border-[#8B5CF6]/50 text-white text-xs backdrop-blur-xl flex items-center gap-2 shadow-2xl animate-fadeIn"
+          className="absolute top-28 left-1/2 -translate-x-1/2 z-[100] px-3.5 py-1.5 rounded-xl bg-[#08090C]/95 border border-[#8B5CF6]/50 text-white text-xs backdrop-blur-xl flex items-center gap-2 shadow-2xl animate-fadeIn"
         >
           <Crosshair className="w-3.5 h-3.5 text-[#10B981]" />
           <span>AOI Viewport Centered</span>

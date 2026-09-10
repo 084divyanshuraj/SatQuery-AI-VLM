@@ -8,6 +8,10 @@ export default defineConfig({
     port: 5173,
     host: true,
     proxy: {
+      '/api': {
+        target: 'http://localhost:7001',
+        changeOrigin: true,
+      },
       '/api-proxy': {
         target: 'https://proappropriation-rolando-intestinally.ngrok-free.dev',
         changeOrigin: true,

@@ -6,6 +6,7 @@ import base64
 import logging
 import asyncio
 import tempfile
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -216,16 +217,58 @@ async def upload_raster(file: UploadFile = File(...)):
             detail=f"Uploaded file '{file.filename}' could not be parsed: {str(e)}"
         )
 
+REPORTS_DIR = os.path.join(tempfile.gettempdir(), "satquery_generated_reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+@app.get("/api/reports/{filename}/download")
+async def download_report_file(filename: str):
+    """Direct native HTTP attachment download for White A4 PDF Reports (bypasses browser blob blocking)."""
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(REPORTS_DIR, safe_filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Requested PDF report file not found on server.")
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=safe_filename,
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "Content-Type": "application/pdf",
+            "Cache-Control": "no-cache",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
+@app.get("/api/reports/{filename}/view")
+async def view_report_file(filename: str):
+    """Direct HTTP inline viewer for White A4 PDF Reports (opens immediately in browser's native PDF reader)."""
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(REPORTS_DIR, safe_filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Requested PDF report file not found on server.")
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=safe_filename,
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_filename}"',
+            "Content-Type": "application/pdf",
+            "Cache-Control": "no-cache",
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 @app.post("/api/export_pdf")
 async def export_pdf(request: ExportPDFRequest):
     """
-    Generates a high-quality ReportLab PDF report and streams it back to the client.
+    Generates a high-quality ReportLab White A4 PDF report and streams it back to the client.
     Handles 'for_res.png' compliant Flood Grounding data structure beautifully.
     """
     try:
-        temp_dir = tempfile.gettempdir()
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_pdf_path = os.path.join(temp_dir, f"satquery-executive-report_{os.getpid()}_{int(asyncio.get_event_loop().time()*1000)}.pdf")
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_filename = f"SatQuery_Executive_Report_{timestamp_str}.pdf"
+        temp_pdf_path = os.path.join(REPORTS_DIR, report_filename)
         
         formatted_logs = []
         for log in request.trace_logs:
@@ -261,10 +304,14 @@ async def export_pdf(request: ExportPDFRequest):
             return FileResponse(
                 path=temp_pdf_path,
                 media_type="application/pdf",
-                filename="satquery-executive-report.pdf",
+                filename=report_filename,
                 headers={
-                    "Content-Disposition": 'attachment; filename="satquery-executive-report.pdf"',
-                    "Access-Control-Expose-Headers": "Content-Disposition"
+                    "Content-Disposition": f'attachment; filename="{report_filename}"',
+                    "Content-Type": "application/pdf",
+                    "X-Report-Filename": report_filename,
+                    "X-Download-Url": f"/api/reports/{report_filename}/download",
+                    "X-View-Url": f"/api/reports/{report_filename}/view",
+                    "Access-Control-Expose-Headers": "Content-Disposition, X-Report-Filename, X-Download-Url, X-View-Url"
                 }
             )
         else:
