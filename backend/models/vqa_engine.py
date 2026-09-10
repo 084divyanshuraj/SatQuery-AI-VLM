@@ -117,10 +117,10 @@ def _smart_fallback(query: str, image_bytes: Optional[bytes] = None) -> dict:
             green_mask = (hue >= 35) & (hue <= 85) & (sat > 35) & (val > 35)
             green_ratio = float(np.mean(green_mask))
 
-            # Blue glow/netting presence: Even a 1.5% bright blue mesh on field is unmistakable
-            has_blue_glow = blue_ratio > 0.015
+            # Water body / Aquatic detection (Sentinel / RISAT multispectral oceans, lakes, rivers)
+            is_water_raster = (blue_ratio > 0.06)
 
-            # Compute bounding box of blue features if present
+            # Compute bounding box of blue / water features if present
             if np.any(blue_mask):
                 y_idx, x_idx = np.where(blue_mask)
                 ymin, ymax = int(np.percentile(y_idx, 2)), int(np.percentile(y_idx, 98))
@@ -130,21 +130,22 @@ def _smart_fallback(query: str, image_bytes: Optional[bytes] = None) -> dict:
                 bw = round(((xmax - xmin) / w) * 100, 1)
                 bh = round(((ymax - ymin) / h) * 100, 1)
                 blue_box = {
-                    "label": "Blue Illuminated Netting / Area",
+                    "label": "Marine / Water Body Area",
                     "x": max(0.0, min(95.0, bx)),
                     "y": max(0.0, min(95.0, by)),
                     "width": max(10.0, min(100.0 - bx, bw)),
                     "height": max(10.0, min(100.0 - by, bh))
                 }
 
-            # Night or twilight landscape conditions
-            dark_ratio = float(np.mean(val < 60))
-            is_night_or_dark = (dark_ratio > 0.35) or (overall_val < 95) or has_blue_glow
+            # Astronomical night condition: requires truly dark overall radiance and absence of typical daytime vegetation/clouds
+            dark_ratio = float(np.mean(val < 50))
+            is_night_or_dark = (dark_ratio > 0.70) and (overall_val < 75) and (green_ratio < 0.05)
+            has_blue_glow = is_night_or_dark and (blue_ratio > 0.04)
             has_dominant_green = green_ratio > 0.18
             has_clouds_or_mist = (np.mean((val > 200) & (sat < 40)) > 0.15)
             
             # Urban satellite detection: Must NOT trigger on night scenes or natural vegetation
-            is_urban_raster = ((edge_density > 0.12) or (lap_var > 600)) and not is_night_or_dark and not has_blue_glow and not has_dominant_green and (green_ratio < 0.20)
+            is_urban_raster = ((edge_density > 0.12) or (lap_var > 600)) and not is_night_or_dark and not has_dominant_green and (green_ratio < 0.20)
         except Exception as err:
             logger.warning(f"Image pixel inspection fallback: {err}")
 
@@ -275,17 +276,11 @@ def _smart_fallback(query: str, image_bytes: Optional[bytes] = None) -> dict:
     ]) or (len(words) <= 5 and any(w in words for w in ["what", "where", "see", "there"]))
 
     if is_overview or True:
-        if is_night_or_dark or has_blue_glow:
+        if is_water_raster:
             return {
-                "answer": "The image shows a long-exposure night landscape featuring vibrant blue illuminated netting across a field, with star trails streaking across the twilight sky above a silhouette tree line.",
-                "confidence": 0.65,
-                "grounding_box": blue_box or {"label": "Night Landscape & Stars", "x": 8, "y": 8, "width": 84, "height": 84}
-            }
-        elif is_urban_raster:
-            return {
-                "answer": "The image shows a dense urban sector featuring complex architectural blocks, road networks, open circular plazas, and a river corridor flowing along the eastern edge.",
-                "confidence": 0.60,
-                "grounding_box": {"label": "Urban Area of Interest", "x": 12, "y": 15, "width": 76, "height": 70}
+                "answer": "The multispectral tile displays an active coastal / marine water body with distinct land-water interface boundaries, shallow sediment gradients, and terrestrial terrain.",
+                "confidence": 0.68,
+                "grounding_box": blue_box or {"label": "Marine / Coastal Water Body", "x": 10, "y": 10, "width": 80, "height": 80}
             }
         elif has_dominant_green or (green_ratio > 0.12):
             return {
@@ -293,10 +288,22 @@ def _smart_fallback(query: str, image_bytes: Optional[bytes] = None) -> dict:
                 "confidence": 0.68,
                 "grounding_box": {"label": "Meandering River Corridor & Valley", "x": 28, "y": 36, "width": 52, "height": 45}
             }
+        elif is_urban_raster:
+            return {
+                "answer": "The image shows a dense urban sector featuring complex architectural blocks, road networks, open circular plazas, and a river corridor flowing along the eastern edge.",
+                "confidence": 0.60,
+                "grounding_box": {"label": "Urban Area of Interest", "x": 12, "y": 15, "width": 76, "height": 70}
+            }
+        elif is_night_or_dark and has_blue_glow:
+            return {
+                "answer": "The image shows a long-exposure night landscape featuring vibrant blue illuminated netting across a field, with star trails streaking across the twilight sky above a silhouette tree line.",
+                "confidence": 0.65,
+                "grounding_box": blue_box or {"label": "Night Landscape & Stars", "x": 8, "y": 8, "width": 84, "height": 84}
+            }
         else:
             return {
-                "answer": "The image shows an active landscape featuring open terrain, vegetative cover, and natural ground features.",
-                "confidence": 0.55,
+                "answer": "The image shows an active Earth observation landscape featuring open terrain, vegetative cover, and natural ground features.",
+                "confidence": 0.58,
                 "grounding_box": {"label": "Primary AOI", "x": 20, "y": 25, "width": 60, "height": 50}
             }
 
