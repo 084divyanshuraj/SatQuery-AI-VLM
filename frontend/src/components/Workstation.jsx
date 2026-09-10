@@ -14,7 +14,13 @@ import {
   Sparkles, 
   Award, 
   Layers, 
-  Crosshair 
+  Crosshair,
+  Grid,
+  X,
+  Eye,
+  EyeOff,
+  Sliders,
+  Maximize2 
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
 
@@ -46,6 +52,61 @@ export default function Workstation({
   const [isUploading, setIsUploading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(11);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [showLayersPanel, setShowLayersPanel] = useState(false);
+  const [activeSpectralPreset, setActiveSpectralPreset] = useState('natural');
+  const [showGroundingOverlay, setShowGroundingOverlay] = useState(true);
+  const [showGridOverlay, setShowGridOverlay] = useState(false);
+  const [recenterToast, setRecenterToast] = useState(false);
+
+  // Spectral LUT filter generator for raw and processed satellite imagery
+  const getSpectralFilter = (preset) => {
+    switch (preset) {
+      case 'cir': // Color Infrared (B8-B4-B3: False color vegetation & chlorophyll)
+        return 'hue-rotate(290deg) saturate(2.2) contrast(1.25)';
+      case 'swir': // Shortwave Infrared (B12-B8-B4: Atmospheric & moisture penetration)
+        return 'hue-rotate(185deg) saturate(1.8) contrast(1.35) brightness(0.95)';
+      case 'ndwi': // NDWI Water extraction contrast LUT
+        return 'hue-rotate(195deg) saturate(2.4) contrast(1.4) brightness(1.05)';
+      case 'highcontrast': // Topographic Radiometric Contrast Stretch
+        return 'contrast(1.55) brightness(1.1) saturate(1.3)';
+      case 'thermal': // Thermal Night Invert
+        return 'invert(0.9) hue-rotate(180deg) contrast(1.3)';
+      default: // 'natural' True Color RGB
+        return 'none';
+    }
+  };
+
+  // Canvas Drag Pan handlers
+  const handleCanvasMouseDown = (e) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - panOffset.x,
+      y: e.clientY - panOffset.y
+    });
+  };
+
+  const handleCanvasMouseMove = (e) => {
+    if (!isDragging) return;
+    setPanOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleCanvasMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleRecenterAOI = () => {
+    setZoomLevel(11);
+    setPanOffset({ x: 0, y: 0 });
+    setRecenterToast(true);
+    setTimeout(() => setRecenterToast(false), 2200);
+  };
   const [metadata, setMetadata] = useState(null);
 
   const [query, setQuery] = useState('');
@@ -964,7 +1025,17 @@ export default function Workstation({
           </div>
 
           {/* Main Visual Viewport: Workflow-Aware Real Satellite Imagery Area */}
-          <div className="relative flex-1 w-full rounded-xl overflow-hidden border border-white/15 bg-[#08090C]/95 backdrop-blur-sm flex items-center justify-center min-h-0">
+          <div 
+            id="geospatial-canvas-viewport"
+            data-testid="geospatial-canvas-viewport"
+            className={`relative flex-1 w-full rounded-xl overflow-hidden border border-white/15 bg-[#08090C]/95 backdrop-blur-sm flex items-center justify-center min-h-0 select-none ${
+              (opticalImage || sarImage || bitemporalAfter) ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''
+            }`}
+            onMouseDown={handleCanvasMouseDown}
+            onMouseMove={handleCanvasMouseMove}
+            onMouseUp={handleCanvasMouseUp}
+            onMouseLeave={handleCanvasMouseUp}
+          >
             
             {/* WORKFLOW 4: PERFORMANCE & BENCHMARKS */}
             {mode === 'benchmarks' ? (
@@ -1024,18 +1095,42 @@ export default function Workstation({
                 {layerErrors['single'] ? (
                   <div className="text-white/60 font-mono text-xs">Satellite layer unavailable.</div>
                 ) : (
-                  <div className="relative max-w-full max-h-full flex items-center justify-center">
+                  <div 
+                    className="relative max-w-full max-h-full flex items-center justify-center transition-transform duration-100 ease-out"
+                    style={{
+                      transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel / 11})`
+                    }}
+                  >
                     <img 
                       src={activeAnalysisResult && showAnalysisOverlay ? activeAnalysisResult : opticalImage} 
                       alt="Sentinel-2 Single Baseline" 
-                      className="max-w-full max-h-[calc(100vh-270px)] object-contain rounded-xl shadow-2xl transition-transform duration-200"
-                      style={{ transform: `scale(${zoomLevel / 11})` }}
+                      className="max-w-full max-h-[calc(100vh-270px)] object-contain rounded-xl shadow-2xl transition-[filter] duration-200 pointer-events-none"
+                      style={{ filter: getSpectralFilter(activeSpectralPreset) }}
                       onError={() => setLayerErrors(prev => ({ ...prev, single: true }))}
                     />
 
+                    {/* HUD Coordinate Grid Overlay */}
+                    {showGridOverlay && (
+                      <div className="absolute inset-0 pointer-events-none z-10 border border-[#8B5CF6]/40 rounded-xl overflow-hidden shadow-[inset_0_0_20px_rgba(139,92,246,0.2)]">
+                        <div 
+                          className="w-full h-full" 
+                          style={{ 
+                            backgroundImage: 'linear-gradient(to right, rgba(139, 92, 246, 0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(139, 92, 246, 0.22) 1px, transparent 1px)', 
+                            backgroundSize: '36px 36px' 
+                          }} 
+                        />
+                        <span className="absolute top-1 left-2 text-[8.5px] font-mono text-[#8B5CF6] font-bold bg-[#08090C]/90 px-1 rounded border border-[#8B5CF6]/30">
+                          AOI LAT: {geoData.lat.toFixed(4)}°N
+                        </span>
+                        <span className="absolute bottom-1 right-2 text-[8.5px] font-mono text-[#8B5CF6] font-bold bg-[#08090C]/90 px-1 rounded border border-[#8B5CF6]/30">
+                          AOI LON: {geoData.lon.toFixed(4)}°E
+                        </span>
+                      </div>
+                    )}
+
                     {/* Subtle Toggle for Analysis Result (if available) */}
                     {activeAnalysisResult && (
-                      <div className="absolute top-3 right-3 flex items-center gap-1 bg-[#08090C]/90 border border-white/15 rounded-lg p-1 backdrop-blur-md z-20 font-mono text-[9px] shadow-lg">
+                      <div className="absolute top-3 right-3 flex items-center gap-1 bg-[#08090C]/90 border border-white/15 rounded-lg p-1 backdrop-blur-md z-30 font-mono text-[9px] shadow-lg pointer-events-auto">
                         <button
                           type="button"
                           onClick={() => setShowAnalysisOverlay(false)}
@@ -1054,10 +1149,10 @@ export default function Workstation({
                     )}
 
                     {/* Yellow Bounding Box Overlay */}
-                    {groundingBoxes && groundingBoxes.map((box, idx) => (
+                    {showGroundingOverlay && groundingBoxes && groundingBoxes.map((box, idx) => (
                       <div 
                         key={idx}
-                        className="absolute border-2 border-yellow-400 bg-yellow-400/10 rounded-sm shadow-[0_0_15px_rgba(250,204,21,0.4)] z-10 pointer-events-none"
+                        className="absolute border-2 border-yellow-400 bg-yellow-400/10 rounded-sm shadow-[0_0_15px_rgba(250,204,21,0.4)] z-20 pointer-events-none animate-fadeIn"
                         style={{
                           left: `${box.x}%`,
                           top: `${box.y}%`,
@@ -1092,8 +1187,11 @@ export default function Workstation({
                     <img
                       src={opticalImage}
                       alt="Sentinel-2 Baseline (T0)"
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                      style={{ transform: `scale(${zoomLevel / 11})`, transition: 'transform 0.2s ease-out' }}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg pointer-events-none transition-[filter] duration-200"
+                      style={{ 
+                        transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel / 11})`, 
+                        filter: getSpectralFilter(activeSpectralPreset)
+                      }}
                       onError={() => setLayerErrors(prev => ({ ...prev, before: true }))}
                     />
                   ) : (
@@ -1117,8 +1215,11 @@ export default function Workstation({
                     <img
                       src={bitemporalAfter}
                       alt="Sentinel-2 Post-Event (T1)"
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                      style={{ transform: `scale(${zoomLevel / 11})`, transition: 'transform 0.2s ease-out' }}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg pointer-events-none transition-[filter] duration-200"
+                      style={{ 
+                        transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel / 11})`, 
+                        filter: getSpectralFilter(activeSpectralPreset)
+                      }}
                       onError={() => setLayerErrors(prev => ({ ...prev, after: true }))}
                     />
                   ) : (
@@ -1143,8 +1244,11 @@ export default function Workstation({
                     <img
                       src={opticalImage}
                       alt="Sentinel-2 Optical Layer"
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                      style={{ transform: `scale(${zoomLevel / 11})`, transition: 'transform 0.2s ease-out' }}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg pointer-events-none transition-[filter] duration-200"
+                      style={{ 
+                        transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel / 11})`, 
+                        filter: getSpectralFilter(activeSpectralPreset)
+                      }}
                       onError={() => setLayerErrors(prev => ({ ...prev, optical: true }))}
                     />
                   ) : (
@@ -1168,8 +1272,11 @@ export default function Workstation({
                     <img
                       src={sarImage}
                       alt="Sentinel-1 SAR Radar Layer"
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
-                      style={{ transform: `scale(${zoomLevel / 11})`, transition: 'transform 0.2s ease-out' }}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-lg pointer-events-none transition-[filter] duration-200"
+                      style={{ 
+                        transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel / 11})`, 
+                        filter: getSpectralFilter(activeSpectralPreset)
+                      }}
                       onError={() => setLayerErrors(prev => ({ ...prev, sar: true }))}
                     />
                   ) : (
@@ -1182,36 +1289,181 @@ export default function Workstation({
               </div>
             )}
 
+            {/* Recenter Toast Notification */}
+            {recenterToast && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full bg-[#10B981]/25 border border-[#10B981] text-[#10B981] font-mono text-[10px] font-bold backdrop-blur-md shadow-[0_0_20px_rgba(16,185,129,0.5)] z-40 animate-fadeIn flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-[#10B981]" />
+                <span>AOI RECENTERED (100% SCALE)</span>
+              </div>
+            )}
+
             {/* Left Floating Map Controls Stack (Active whenever satellite data is present) */}
             {mode !== 'benchmarks' && (opticalImage || sarImage || bitemporalAfter) && (
               <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30">
+                {/* 1. Zoom In Button */}
                 <button 
-                  onClick={() => setZoomLevel(prev => Math.min(prev + 1, 16))}
-                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] flex items-center justify-center text-[#10B981] transition backdrop-blur-md shadow-md cursor-pointer"
-                  title="Zoom In"
+                  id="btn-canvas-zoom-in"
+                  data-testid="btn-canvas-zoom-in"
+                  onClick={() => setZoomLevel(prev => Math.min(prev + 2, 25))}
+                  className="w-8 h-8 rounded-xl bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] flex items-center justify-center text-[#10B981] transition backdrop-blur-md shadow-md cursor-pointer active:scale-95"
+                  title="Zoom In (Scale up AOI)"
                 >
-                  <ZoomIn className="w-3.5 h-3.5 text-[#10B981]" />
+                  <ZoomIn className="w-4 h-4 text-[#10B981]" />
                 </button>
+
+                {/* 2. Zoom Out Button */}
                 <button 
-                  onClick={() => setZoomLevel(prev => Math.max(prev - 1, 8))}
-                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] flex items-center justify-center text-[#10B981] transition backdrop-blur-md shadow-md cursor-pointer"
-                  title="Zoom Out"
+                  id="btn-canvas-zoom-out"
+                  data-testid="btn-canvas-zoom-out"
+                  onClick={() => setZoomLevel(prev => Math.max(prev - 2, 7))}
+                  className="w-8 h-8 rounded-xl bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#10B981] flex items-center justify-center text-[#10B981] transition backdrop-blur-md shadow-md cursor-pointer active:scale-95"
+                  title="Zoom Out (Scale down AOI)"
                 >
-                  <ZoomOut className="w-3.5 h-3.5 text-[#10B981]" />
+                  <ZoomOut className="w-4 h-4 text-[#10B981]" />
                 </button>
+
+                {/* 3. Recenter AOI Button */}
                 <button 
-                  onClick={() => setZoomLevel(11)}
-                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#8B5CF6] flex items-center justify-center text-[#8B5CF6] transition backdrop-blur-md shadow-md cursor-pointer"
-                  title="Recenter AOI"
+                  id="btn-canvas-recenter"
+                  data-testid="btn-canvas-recenter"
+                  onClick={handleRecenterAOI}
+                  className="w-8 h-8 rounded-xl bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#8B5CF6] flex items-center justify-center text-[#8B5CF6] transition backdrop-blur-md shadow-md cursor-pointer active:scale-95"
+                  title="Recenter AOI (Reset Zoom & Pan)"
                 >
-                  <Crosshair className="w-3.5 h-3.5 text-[#8B5CF6]" />
+                  <Crosshair className="w-4 h-4 text-[#8B5CF6]" />
                 </button>
+
+                {/* 4. Spectral Bands & Layers Toggle Button */}
                 <button 
-                  className="w-7 h-7 rounded-lg bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#F43F5E] flex items-center justify-center text-[#F43F5E] transition backdrop-blur-md shadow-md cursor-pointer"
-                  title="Layers Configuration"
+                  id="btn-canvas-layers"
+                  data-testid="btn-canvas-layers"
+                  onClick={() => setShowLayersPanel(prev => !prev)}
+                  className={`w-8 h-8 rounded-xl transition backdrop-blur-md shadow-md cursor-pointer flex items-center justify-center active:scale-95 ${
+                    showLayersPanel 
+                      ? 'bg-[#F43F5E]/30 border-2 border-[#F43F5E] text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]' 
+                      : 'bg-[#12131C]/90 hover:bg-[#1A1B26] border border-white/15 hover:border-[#F43F5E] text-[#F43F5E]'
+                  }`}
+                  title="Spectral Bands & Layer Overlay Configuration"
                 >
-                  <Layers className="w-3.5 h-3.5 text-[#F43F5E]" />
+                  <Layers className="w-4 h-4 text-[#F43F5E]" />
                 </button>
+              </div>
+            )}
+
+            {/* High-Tech Spectral Bands & Layers HUD Popover */}
+            {showLayersPanel && (opticalImage || sarImage || bitemporalAfter) && (
+              <div 
+                id="canvas-layers-popover"
+                data-testid="canvas-layers-popover"
+                className="absolute top-3 left-14 w-72 rounded-2xl bg-[#08090C]/95 border border-[#F43F5E]/40 backdrop-blur-2xl p-3.5 z-40 shadow-[0_0_30px_rgba(0,0,0,0.85)] animate-fadeIn select-none text-xs font-mono"
+              >
+                {/* Popover Header */}
+                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#F43F5E]" />
+                    <span className="font-bold text-white tracking-wider text-[11px] uppercase">
+                      Spectral Band Engine
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowLayersPanel(false)}
+                    className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Section 1: False Color & Spectral Composites */}
+                <div className="mb-3">
+                  <div className="text-[9px] text-slate-400 uppercase tracking-widest font-bold mb-1.5 flex items-center justify-between">
+                    <span>BAND COMPOSITE (LUT)</span>
+                    <span className="text-[#10B981] font-normal">{activeSpectralPreset.toUpperCase()}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'natural', label: 'True Color RGB', desc: 'B4-B3-B2 Visible', color: '#10B981' },
+                      { id: 'cir', label: 'Color Infrared', desc: 'B8-B4-B3 Veg (NIR)', color: '#EC4899' },
+                      { id: 'swir', label: 'SWIR Moisture', desc: 'B12-B8-B4 Penetration', color: '#F59E0B' },
+                      { id: 'ndwi', label: 'NDWI Water Mask', desc: 'Water Delineation', color: '#06B6D4' },
+                      { id: 'highcontrast', label: 'Radiometric High', desc: 'Contrast Stretch', color: '#8B5CF6' },
+                      { id: 'thermal', label: 'Thermal Invert', desc: 'Heat Gradient', color: '#F43F5E' }
+                    ].map((item) => {
+                      const isSel = activeSpectralPreset === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveSpectralPreset(item.id)}
+                          className={`p-1.5 rounded-xl border text-left transition cursor-pointer flex flex-col ${
+                            isSel 
+                              ? 'bg-white/10 border-[#10B981] shadow-[0_0_8px_rgba(16,185,129,0.3)] font-bold' 
+                              : 'bg-[#12131C] border-white/10 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }} />
+                            <span className="font-bold text-[10px] text-white truncate">{item.label}</span>
+                          </div>
+                          <span className="text-[8px] text-slate-400 truncate mt-0.5">{item.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section 2: Overlays & Reticles Toggle */}
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <div className="text-[9px] text-slate-400 uppercase tracking-widest font-bold mb-1">
+                    CANVAS OVERLAYS
+                  </div>
+
+                  {/* AI Grounding Bounding Box Toggle */}
+                  <label className="flex items-center justify-between p-2 rounded-xl bg-[#12131C] border border-white/10 cursor-pointer hover:border-white/20">
+                    <span className="text-[10px] text-slate-200 flex items-center gap-1.5 font-sans">
+                      <span className="w-2.5 h-2.5 rounded-sm border border-yellow-400 bg-yellow-400/25" />
+                      AI Grounding Reticles
+                    </span>
+                    <input 
+                      type="checkbox" 
+                      checked={showGroundingOverlay}
+                      onChange={(e) => setShowGroundingOverlay(e.target.checked)}
+                      className="accent-[#10B981] cursor-pointer w-3.5 h-3.5"
+                    />
+                  </label>
+
+                  {/* Geospatial HUD Grid Overlay */}
+                  <label className="flex items-center justify-between p-2 rounded-xl bg-[#12131C] border border-white/10 cursor-pointer hover:border-white/20">
+                    <span className="text-[10px] text-slate-200 flex items-center gap-1.5 font-sans">
+                      <Grid className="w-3 h-3 text-[#8B5CF6]" />
+                      HUD Coordinate Grid
+                    </span>
+                    <input 
+                      type="checkbox" 
+                      checked={showGridOverlay}
+                      onChange={(e) => setShowGridOverlay(e.target.checked)}
+                      className="accent-[#8B5CF6] cursor-pointer w-3.5 h-3.5"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Bottom HUD Zoom Level & Telemetry Badge */}
+            {mode !== 'benchmarks' && (opticalImage || sarImage || bitemporalAfter) && (
+              <div className="absolute bottom-3 left-3 px-2.5 py-1 rounded-lg bg-[#08090C]/90 border border-white/10 text-[9.5px] font-mono text-slate-300 backdrop-blur-md z-30 flex items-center gap-2 shadow-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
+                <span className="font-bold text-white">ZOOM: {Math.round((zoomLevel / 11) * 100)}%</span>
+                {activeSpectralPreset !== 'natural' && (
+                  <span className="text-[#EC4899] font-bold">[{activeSpectralPreset.toUpperCase()}]</span>
+                )}
+                {(panOffset.x !== 0 || panOffset.y !== 0) && (
+                  <button 
+                    onClick={() => setPanOffset({ x: 0, y: 0 })}
+                    title="Reset Pan"
+                    className="text-slate-400 hover:text-white underline text-[8.5px] cursor-pointer"
+                  >
+                    Reset Pan
+                  </button>
+                )}
               </div>
             )}
 
