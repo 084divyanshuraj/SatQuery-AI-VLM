@@ -49,7 +49,8 @@ export default function GeoChatbot({
   isExporting,
   backendUrl = "http://localhost:7001",
   activeSessionId,
-  onSessionUpdated
+  onSessionUpdated,
+  onMessagesChange
 }) {
   const [messages, setMessages] = useState([
     {
@@ -60,6 +61,13 @@ export default function GeoChatbot({
       confidence: 100
     }
   ]);
+
+  // Continuously notify parent workstation of live conversation transcript
+  useEffect(() => {
+    if (onMessagesChange) {
+      onMessagesChange(messages);
+    }
+  }, [messages, onMessagesChange]);
 
   // Load session messages from database whenever activeSessionId changes
   useEffect(() => {
@@ -418,9 +426,9 @@ export default function GeoChatbot({
         onAddTraceLogs(formattedLogs);
       }
 
-      // Reflect reply, confidence and spatial grounding boxes on Interactive Geospatial Canvas
+      // Reflect reply, confidence, spatial grounding boxes, and user query on Interactive Geospatial Canvas
       if (onApplyGrounding) {
-        onApplyGrounding(responseData.grounding_boxes || [], responseData.confidence, responseData.reply, responseData.intent);
+        onApplyGrounding(responseData.grounding_boxes || [], responseData.confidence, responseData.reply, responseData.intent, query);
       }
 
       // Append AI response to chat stream
@@ -693,7 +701,8 @@ export default function GeoChatbot({
                   query: lastUserMsg?.text || workstationContext?.query,
                   output_text: lastAssistantMsg?.text || workstationContext?.output,
                   confidence: lastAssistantMsg?.confidence || workstationContext?.confidence,
-                  grounding_boxes: lastAssistantMsg?.grounding_boxes || workstationContext?.groundingBoxes
+                  grounding_boxes: lastAssistantMsg?.grounding_boxes || workstationContext?.groundingBoxes,
+                  imageSrc: workstationContext?.opticalImage || workstationContext?.sarImage
                 });
               }}
               disabled={isExporting}

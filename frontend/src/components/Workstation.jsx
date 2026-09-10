@@ -61,6 +61,26 @@ export default function Workstation({
   const [showGridOverlay, setShowGridOverlay] = useState(false);
   const [recenterToast, setRecenterToast] = useState(false);
   const [pdfStatusToast, setPdfStatusToast] = useState(null);
+  const [liveChatHistory, setLiveChatHistory] = useState([]);
+
+  // Restore session raster image & metadata from sessionStorage if previously uploaded
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sessionKey = activeSessionId || 'default';
+      try {
+        const cachedImg = sessionStorage.getItem(`satquery_img_${sessionKey}`);
+        const cachedMeta = sessionStorage.getItem(`satquery_meta_${sessionKey}`);
+        if (cachedImg && !opticalImage && !sarImage) {
+          setOpticalImage(cachedImg);
+        }
+        if (cachedMeta && !metadata) {
+          setMetadata(JSON.parse(cachedMeta));
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+  }, [activeSessionId]);
 
   // Spectral LUT filter generator for raw and processed satellite imagery
   const getSpectralFilter = (preset) => {
@@ -360,6 +380,21 @@ export default function Workstation({
             setSarImage(parsedData.preview_image);
           }
         }
+        // Cache uploaded raster preview and metadata per session
+        if (typeof window !== 'undefined') {
+          const sessionKey = activeSessionId || 'default';
+          try {
+            sessionStorage.setItem(`satquery_img_${sessionKey}`, parsedData.preview_image);
+            sessionStorage.setItem(`satquery_meta_${sessionKey}`, JSON.stringify({
+              file: parsedData.filename,
+              size: `${parsedData.size_mb.toFixed(2)} MB`,
+              res: resFormatted,
+              crs: parsedData.crs,
+              bands: `${parsedData.bands} Active Channels`,
+              dim: `${parsedData.width} x ${parsedData.height} px`
+            }));
+          } catch (storageErr) {}
+        }
       }
     } catch (err) {
       const reader = new FileReader();
@@ -641,17 +676,59 @@ export default function Workstation({
     setPdfStatusToast({ type: 'loading', message: 'Generating Executive White A4 PDF Report...' });
 
     try {
-      // 1. Resolve active raster images (primary and bi-temporal after)
-      const targetImageSrc = customPayload.imageSrc || opticalImage || sarImage;
-      const base64Primary = await resolveImageToBase64(targetImageSrc);
+      // 1. Sanitize customPayload: if it's a DOM/React SyntheticEvent, ignore it
+      const options = (customPayload && typeof customPayload === 'object' && !customPayload.nativeEvent && !customPayload.target) 
+        ? customPayload 
+        : {};
+
+      // 2. Resolve chat history from options, live component state, or SQLite database
+      let sessionChatHistory = options.chat_history || (liveChatHistory && liveChatHistory.length > 0 ? liveChatHistory : null);
+
+      if ((!sessionChatHistory || sessionChatHistory.length === 0) && activeSessionId) {
+        try {
+          const sessRes = await fetch(`${BACKEND_HTTP}/api/history/sessions/${activeSessionId}`);
+          if (sessRes.ok) {
+            const dbMsgs = await sessRes.json();
+            if (dbMsgs && dbMsgs.length > 0) {
+              sessionChatHistory = dbMsgs;
+              setLiveChatHistory(dbMsgs);
+            }
+          }
+        } catch (sessErr) {
+          console.warn("Session history fetch notice during PDF export:", sessErr);
+        }
+      }
+
+      // 3. Extract meaningful exchanges and the analyst's latest user query + assistant response
+      const meaningfulChats = Array.isArray(sessionChatHistory)
+        ? sessionChatHistory.filter(m => m.role === 'user' || (m.role === 'assistant' && m.id !== 'init-1' && !m.text?.includes('SatQuery AI is online and ready')))
+        : [];
+
+      const lastUserMsg = [...meaningfulChats].reverse().find(m => m.role === 'user');
+      const lastAssistantMsg = [...meaningfulChats].reverse().find(m => m.role === 'assistant');
+
+      const activeQuery = options.query || lastUserMsg?.text || query || "Geospatial Multi-Modal Satellite Raster Inspection";
+      const activeOutput = options.output_text || lastAssistantMsg?.text || output || "Geospatial inspection and AI spatial reasoning analysis completed for active satellite raster layer.";
+      const activeConf = options.confidence || lastAssistantMsg?.confidence || confidence || 94.2;
+      const activeBoxes = options.grounding_boxes || lastAssistantMsg?.grounding_boxes || groundingBoxes || [];
+
+      // 4. Resolve active raster images (primary and bi-temporal after)
+      const sessionKey = activeSessionId || 'default';
+      const cachedSessionImg = typeof window !== 'undefined' ? sessionStorage.getItem(`satquery_img_${sessionKey}`) : null;
+      const targetImageSrc = options.imageSrc || opticalImage || sarImage || cachedSessionImg;
+      const base64Primary = targetImageSrc ? await resolveImageToBase64(targetImageSrc) : null;
       const base64After = bitemporalAfter ? await resolveImageToBase64(bitemporalAfter) : null;
 
-      const activeQuery = customPayload.query || query || "Geospatial multi-modal raster inspection and spatial reasoning";
-      const activeOutput = customPayload.output_text || output || "Geospatial inspection and AI spatial reasoning analysis completed for active satellite raster layer.";
-      const activeConf = customPayload.confidence || confidence || 94.2;
-      const activeBoxes = customPayload.grounding_boxes || groundingBoxes || [];
+      // 5. Ingested Metadata
+      let exportMetadata = metadata;
+      if (!exportMetadata && typeof window !== 'undefined') {
+        try {
+          const cachedMeta = sessionStorage.getItem(`satquery_meta_${sessionKey}`);
+          if (cachedMeta) exportMetadata = JSON.parse(cachedMeta);
+        } catch (e) {}
+      }
 
-      // 2. Dynamically categorize report title and status based on real user query
+      // 6. Dynamically categorize report title and status based on real user query & conversation
       const qLower = activeQuery.toLowerCase();
       let dynamicTitle = "Geospatial Multi-Modal Intelligence Report";
       let dynamicAlert = "ANALYSIS COMPLETE";
@@ -659,7 +736,7 @@ export default function Workstation({
       if (qLower.includes("water") || qLower.includes("flood") || qLower.includes("river") || qLower.includes("breach") || qLower.includes("lake")) {
         dynamicTitle = "Hydrological & Water Surface Grounding Audit";
         dynamicAlert = (qLower.includes("flood") || qLower.includes("breach")) ? "CRITICAL INUNDATION DETECTED" : "WATER BOUNDARIES RESOLVED";
-      } else if (qLower.includes("vegetation") || qLower.includes("ndvi") || qLower.includes("crop") || qLower.includes("canopy") || qLower.includes("forest")) {
+      } else if (qLower.includes("vegetation") || qLower.includes("ndvi") || qLower.includes("crop") || qLower.includes("canopy") || qLower.includes("forest") || qLower.includes("green")) {
         dynamicTitle = "Vegetation Spectral Health & Canopy Index Report";
         dynamicAlert = "OPTIMAL CANOPY HEALTH";
       } else if (qLower.includes("urban") || qLower.includes("building") || qLower.includes("expansion") || qLower.includes("city") || qLower.includes("structure")) {
@@ -671,32 +748,34 @@ export default function Workstation({
       } else if (qLower.includes("cloud") || qLower.includes("mist") || qLower.includes("fog") || qLower.includes("sar")) {
         dynamicTitle = "Atmospheric Penetration & All-Weather Radar Analysis";
         dynamicAlert = "SAR RADAR PENETRATION ACTIVE";
+      } else if (qLower.includes("sky") || qLower.includes("night") || qLower.includes("star") || qLower.includes("trail")) {
+        dynamicTitle = "Twilight Horizon & Atmospheric Trajectory Assessment";
+        dynamicAlert = "ATMOSPHERIC PHENOMENON GROUNDED";
       }
 
       const payload = {
         query: activeQuery,
         mode: mode,
         confidence: typeof activeConf === 'number' ? activeConf : parseFloat(activeConf) || 94.2,
-        metadata: {
-          FILE: metadata?.file || "Sentinel2_MSI_raster.tif",
-          SIZE: metadata?.size || "142.60 MB",
-          RES: metadata?.res || "10.0 m (Sentinel-2)",
-          CRS: metadata?.crs || "EPSG:32643 (UTM Zone 43N)",
-          BANDS: metadata?.bands || "12 Spectral Channels",
-          DIM: metadata?.dim || "1200 x 883 px"
+        metadata: exportMetadata || {
+          FILE: "Interactive_Session_Analysis.tif",
+          SIZE: "Direct Memory Buffer",
+          RES: "10.0 m (High-Resolution)",
+          CRS: "EPSG:32643 (UTM Zone 43N)",
+          BANDS: "Multispectral Channels",
+          DIM: "AOI Viewport Extent"
         },
         output_text: activeOutput,
         trace_logs: logs && logs.length > 0 ? logs.map(l => (typeof l === 'string' ? l : `[0${l.step}] ${l.text}`)) : [
-          "Ingesting active co-registered satellite raster telemetry for target AOI.",
-          "Computing sensor reflectance metrics across spectral channels.",
-          "Executing multi-modal Vision-Language Model spatial reasoning kernel.",
-          "Resolving localized bounding coordinates and compiling dynamic PDF executive report."
+          `Ingested analyst natural language query: "${activeQuery}"`,
+          "Validated multi-modal spectral tokens and spatial reasoning reticles.",
+          "Assembling dialogue transcript and grounding metrics for executive report dispatch."
         ],
         extra_report_data: {
           report_title: dynamicTitle,
           alert_level: dynamicAlert,
           mission_id: "ISRO-SAC-26167",
-          extent_area: metadata?.dim || "2.4 ha",
+          extent_area: exportMetadata?.dim || "2.4 ha",
           time_utc: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
           confidence: `${activeConf}%`,
           answer: activeOutput
@@ -704,7 +783,7 @@ export default function Workstation({
         image_base64: base64Primary,
         image_after_base64: base64After,
         grounding_boxes: activeBoxes,
-        chat_history: customPayload.chat_history || null
+        chat_history: sessionChatHistory || null
       };
 
       const response = await fetch(`${BACKEND_HTTP}/api/export_pdf`, {
@@ -906,8 +985,9 @@ export default function Workstation({
 
           {/* High-Tech EXPORT REPORT (PDF) Button with High-Contrast Gradient */}
           <button
-            type="button"
-            onClick={handleExportPDF}
+            id="btn-export-pdf"
+            data-testid="btn-export-pdf"
+            onClick={() => handleExportPDF()}
             disabled={isExporting}
             title="Download Executive Geospatial Intelligence PDF Report"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F43F5E] hover:opacity-95 text-white font-mono font-black text-xs transition-all cursor-pointer shadow-[0_0_18px_rgba(139,92,246,0.4)] backdrop-blur-md active:scale-95 shrink-0"
@@ -1560,11 +1640,13 @@ export default function Workstation({
               confidence,
               output
             }}
-            onApplyGrounding={(boxes, conf, replyText, intent) => {
+            onApplyGrounding={(boxes, conf, replyText, intent, lastQuery) => {
               if (boxes) setGroundingBoxes(boxes);
               if (conf) setConfidence(conf);
               if (replyText) setOutput(replyText);
+              if (lastQuery) setQuery(lastQuery);
             }}
+            onMessagesChange={setLiveChatHistory}
             onAddTraceLogs={(newLogs) => {
               setLogs(prev => [...prev, ...newLogs]);
             }}
