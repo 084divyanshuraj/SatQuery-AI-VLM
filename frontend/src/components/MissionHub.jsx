@@ -5,7 +5,8 @@ import {
   User, 
   History, 
   Trash2,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 
 export default function MissionHub({ 
