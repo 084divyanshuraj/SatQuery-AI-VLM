@@ -25,9 +25,11 @@ import {
   Cloud,
   CloudSun,
   CloudRain,
-  Droplets
+  Droplets,
+  Mountain
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
+import GeoTerrain3D from './GeoTerrain3D.jsx';
 
 export default function Workstation({ 
   mode: propMode, 
@@ -69,6 +71,7 @@ export default function Workstation({
   const [recenterToast, setRecenterToast] = useState(false);
   const [pdfStatusToast, setPdfStatusToast] = useState(null);
   const [liveChatHistory, setLiveChatHistory] = useState([]);
+  const [viewDimension, setViewDimension] = useState('2D'); // '2D' Ortho | '3D' Topographic Terrain
 
   // Restore session raster image & metadata from sessionStorage if previously uploaded
   useEffect(() => {
@@ -1335,13 +1338,45 @@ export default function Workstation({
               </p>
             </div>
             
-            {/* Subtle Status Indicator */}
-            {getCanvasStatus() && (
-              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#08090C] border border-white/15 text-[9px] font-mono text-slate-200 backdrop-blur-md">
-                <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-[#F43F5E] animate-ping' : (activeAnalysisResult || output) ? 'bg-[#10B981]' : 'bg-[#8B5CF6] animate-pulse'}`} />
-                <span>{getCanvasStatus()}</span>
-              </div>
-            )}
+            {/* 2D / 3D Dimension Switcher Pill + Subtle Status Indicator */}
+            <div className="flex items-center gap-2">
+              {(opticalImage || sarImage) && mode !== 'benchmarks' && (
+                <div className="flex items-center gap-1 bg-[#08090C]/90 border border-white/15 p-0.5 rounded-xl backdrop-blur-md shadow-md">
+                  <button
+                    type="button"
+                    onClick={() => setViewDimension('2D')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      viewDimension === '2D'
+                        ? 'bg-[#10B981] text-[#08090C] shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to 2D Orthorectified Satellite View"
+                  >
+                    <span>2D ORTHO</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewDimension('3D')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      viewDimension === '3D'
+                        ? 'bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] text-white shadow-[0_0_12px_rgba(139,92,246,0.6)]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Switch to 3D Topographic Terrain Digital Twin"
+                  >
+                    <Mountain className="w-3 h-3 text-[#10B981]" />
+                    <span>3D TERRAIN</span>
+                  </button>
+                </div>
+              )}
+
+              {getCanvasStatus() && (
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#08090C] border border-white/15 text-[9px] font-mono text-slate-200 backdrop-blur-md">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-[#F43F5E] animate-ping' : (activeAnalysisResult || output) ? 'bg-[#10B981]' : 'bg-[#8B5CF6] animate-pulse'}`} />
+                  <span>{getCanvasStatus()}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Main Visual Viewport: Workflow-Aware Real Satellite Imagery Area */}
@@ -1408,6 +1443,14 @@ export default function Workstation({
                     <span>LOAD SAMPLE DEMO TILE</span>
                   </button>
                 </div>
+              </div>
+            ) : viewDimension === '3D' && (opticalImage || sarImage) ? (
+              /* 3D TOPOGRAPHIC DIGITAL TWIN (WebGL Elevation Mesh) */
+              <div className="w-full h-full p-1 relative flex items-center justify-center">
+                <GeoTerrain3D 
+                  imageSrc={opticalImage || sarImage} 
+                  rasterName={metadata?.file || "Sentinel-2 Topographic Tile"} 
+                />
               </div>
             ) : mode === 'single' ? (
               /* WORKFLOW 1: SINGLE BASELINE (Exactly 1 satellite image) */
