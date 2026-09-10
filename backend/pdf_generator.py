@@ -22,7 +22,7 @@ COLORS = {
     'heading':    HexColor('#0f172a'),  # Slate 900 (High contrast)
     'body':       HexColor('#1e293b'),  # Slate 800 (Crisp dark text)
     'accent':     HexColor('#059669'),  # Emerald 600 (ISRO Geo telemetry pop)
-    'saffron':    HexColor('#d97706'),  # Amber 600 (Grounding pop)
+    'saffron':    HexColor('#d97706'),  # Amber 600 (Grounding pop)https://127.0.0.1:51217/static/artifacts/73668fe8-080e-4162-8eeb-e5cf0aa07611/.user_uploaded/media_1789017911768.png?csrf=18f2c29c-943c-4ee1-bc9c-a6b221968efb
     'red_alert':  HexColor('#dc2626'),  # Red 600 (Critical alerts)
     'blue_alert': HexColor('#2563eb'),  # Blue 600 (Hydrology / SAR)
     'muted':      HexColor('#64748b'),  # Slate 500 (Captions & subtitles)
