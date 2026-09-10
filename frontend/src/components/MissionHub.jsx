@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Clock, 
-  LogOut, 
   User, 
   History, 
   Trash2,
@@ -280,65 +279,57 @@ export default function MissionHub({
         className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-80" 
       />
 
-      {/* Top Header Bar */}
-      <header className="relative z-20 h-13 px-4 sm:px-6 border-b border-white/10 bg-[#12131C]/90 backdrop-blur-xl flex items-center justify-between shrink-0">
+      {/* Top Header Bar (Enlarged & High-Visibility) */}
+      <header className="relative z-20 h-16 sm:h-18 px-4 sm:px-7 border-b border-white/10 bg-[#12131C]/90 backdrop-blur-xl flex items-center justify-between shrink-0 shadow-lg">
         
         {/* Left: SatQuery Logo */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <div 
             onClick={onViewPortal}
             title="Return to SatQuery AI Portal"
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2.5 cursor-pointer group"
           >
-            <div className="w-7 h-7 rounded-lg bg-[#08090C] border border-[#8B5CF6]/60 p-0.5 flex items-center justify-center shadow-[0_0_14px_rgba(139,92,246,0.35)] group-hover:border-[#EC4899] transition-all">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#08090C] border border-[#8B5CF6]/60 p-1 flex items-center justify-center shadow-[0_0_16px_rgba(139,92,246,0.4)] group-hover:border-[#EC4899] transition-all">
               <img 
                 src="/satquery_logo.png" 
                 alt="SatQuery AI Logo" 
                 className="w-full h-full object-contain"
               />
             </div>
-            <div className="flex items-center gap-1 leading-none">
-              <span className="font-bold text-base tracking-tight text-white group-hover:text-slate-100 transition-colors">SatQuery</span>
-              <span className="font-mono font-black text-base bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#10B981] bg-clip-text text-transparent">AI</span>
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white group-hover:text-slate-100 transition-colors drop-shadow-sm">SatQuery</span>
+              <span className="font-mono font-black text-lg sm:text-xl bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#10B981] bg-clip-text text-transparent">AI</span>
             </div>
           </div>
         </div>
 
         {/* Center: Live Orbit Telemetry Ticker */}
-        <div className="hidden md:flex items-center gap-3 text-[11px] font-mono text-slate-300">
-          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#08090C] border border-white/10">
-            <Clock className="w-3 h-3 text-[#10B981]" />
-            <span className="font-bold text-slate-200 tabular-nums">{currentTime || '00:00:00'} UTC</span>
+        <div className="hidden md:flex items-center gap-3 text-xs sm:text-sm font-mono text-slate-300">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#08090C] border border-white/10 shadow-inner">
+            <Clock className="w-3.5 h-3.5 text-[#10B981]" />
+            <span className="font-bold text-slate-200 tabular-nums tracking-wide">{currentTime || '00:00:00'} UTC</span>
           </div>
         </div>
 
         {/* Right: User Profile & Logout */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
 
           {/* User Profile Pill Widget */}
-          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#8B5CF6] via-[#EC4899] to-[#10B981] p-[1.5px] flex items-center justify-center">
-              <div className="w-full h-full rounded-full bg-[#08090C] flex items-center justify-center text-[11px] font-bold text-[#8B5CF6]">
+          <div className="flex items-center gap-2.5 pl-3 border-l border-white/10">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-[#8B5CF6] via-[#EC4899] to-[#10B981] p-[2px] flex items-center justify-center shadow-[0_0_14px_rgba(139,92,246,0.3)] shrink-0">
+              <div className="w-full h-full rounded-full bg-[#08090C] flex items-center justify-center text-xs sm:text-sm font-black text-[#8B5CF6]">
                 {currentUser?.name ? currentUser.name.charAt(0) : 'U'}
               </div>
             </div>
 
             <div className="hidden lg:flex flex-col text-left leading-none">
-              <span className="text-[11px] font-bold text-white truncate max-w-[120px]">
+              <span className="text-xs sm:text-sm font-bold text-white tracking-tight truncate max-w-[140px]">
                 {currentUser?.name || 'Dr. Vikram S. Rao'}
               </span>
-              <span className="text-[9px] font-mono text-[#10B981] truncate max-w-[120px] mt-0.5 font-medium">
+              <span className="text-[10px] sm:text-xs font-mono text-[#10B981] truncate max-w-[140px] mt-1 font-semibold">
                 {currentUser?.rank || 'Level-4 Analyst'}
               </span>
             </div>
-
-            <button
-              onClick={onLogout}
-              title="Sign Out"
-              className="p-1.5 rounded-lg bg-[#08090C] hover:bg-rose-950/80 border border-white/10 hover:border-rose-500/50 text-slate-300 hover:text-rose-200 transition-all cursor-pointer ml-1"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
 
@@ -352,7 +343,7 @@ export default function MissionHub({
         {/* ========================================================================= */}
         {/* LEFT SIDEBAR: CHATGPT-STYLE SESSIONS HISTORY (Matching Image 1)           */}
         {/* ========================================================================= */}
-        <aside className="w-full lg:w-64 xl:w-72 border-b lg:border-b-0 lg:border-r border-white/10 bg-[#08090C] p-3 flex flex-col justify-between shrink-0 h-[calc(100vh-52px)] overflow-hidden">
+        <aside className="w-full lg:w-64 xl:w-72 border-b lg:border-b-0 lg:border-r border-white/10 bg-[#08090C] p-3 flex flex-col justify-between shrink-0 h-[calc(100vh-4rem)] sm:h-[calc(100vh-4.5rem)] overflow-hidden">
           
           {/* Top: Start New Workspace Button */}
           <div className="shrink-0 space-y-3">

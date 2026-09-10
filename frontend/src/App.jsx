@@ -99,6 +99,34 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Create and switch to a fresh persistent session in SQLite
+  const handleCreateNewSession = async (title = "Interactive Inspection Session") => {
+    const backendHttp = import.meta.env.VITE_BACKEND_URL || "http://localhost:7001";
+    const userId = authenticatedUser?.id || "guest_evaluator";
+    try {
+      const res = await fetch(`${backendHttp}/api/history/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          title: title,
+          modality: activeModality || "single"
+        })
+      });
+      if (res.ok) {
+        const newSess = await res.json();
+        setActiveSessionId(newSess.id);
+        setRefreshSessionsTrigger(prev => prev + 1);
+        return newSess.id;
+      }
+    } catch (e) {
+      console.warn("Failed creating new session:", e);
+    }
+    const fallbackId = `session_${Date.now()}`;
+    setActiveSessionId(fallbackId);
+    return fallbackId;
+  };
+
   // Launch Workstation from Hub or Preset with specific modality
   const handleLaunchWorkstation = (modalityId = 'single') => {
     setActiveModality(modalityId);
@@ -226,6 +254,8 @@ export default function App() {
           activeModality={activeModality}
           activeSessionId={activeSessionId}
           onSessionUpdated={() => setRefreshSessionsTrigger(prev => prev + 1)}
+          onCreateNewSession={handleCreateNewSession}
+          onSelectSession={setActiveSessionId}
           onBackToHub={scrollToHub}
           onBackToHero={() => setCurrentRoute('home')}
           isAuthenticated={true}
