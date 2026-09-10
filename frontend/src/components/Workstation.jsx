@@ -3,7 +3,6 @@ import {
   Upload, 
   Download, 
   AlertCircle, 
-  ChevronLeft, 
   Check, 
   MapPin, 
   BarChart3, 
@@ -19,7 +18,18 @@ import {
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
 
-export default function Workstation({ mode: propMode, setMode: propSetMode, activeModality = 'single', onBackToHero, onBackToHub, onReplayIntro, onLogoutClick, currentUser }) {
+export default function Workstation({ 
+  mode: propMode, 
+  setMode: propSetMode, 
+  activeModality = 'single', 
+  onBackToHero, 
+  onBackToHub, 
+  onReplayIntro, 
+  onLogoutClick, 
+  currentUser,
+  activeSessionId,
+  onSessionUpdated 
+}) {
   const [internalMode, setInternalMode] = useState(propMode || activeModality || 'single');
   const mode = propMode || internalMode;
   const setMode = propSetMode || setInternalMode;
@@ -437,7 +447,9 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
         socket.send(JSON.stringify({
           query: query || "Describe crop indices density, track spatial changes or detect water body boundaries...",
           mode: mode,
-          metadata: metadata || {}
+          metadata: metadata || {},
+          image: opticalImage || sarImage || null,
+          image_after: bitemporalAfter || null
         }));
       };
 
@@ -538,44 +550,97 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
     }, 350);
   };
 
-  // Trigger PDF Report Download from FastAPI backend
-  const handleExportPDF = async () => {
+  // Helper to convert an image source (data URL, blob URL, relative path) into a clean base64 data URL
+  const resolveImageToBase64 = async (src) => {
+    if (!src || typeof src !== 'string') return null;
+    if (src.startsWith('data:image')) return src;
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      console.warn("Failed to convert image to base64 for PDF export:", err);
+      return null;
+    }
+  };
+
+  // Trigger Dynamic PDF Report Download from FastAPI backend
+  const handleExportPDF = async (customPayload = {}) => {
     if (isExporting) return;
     setIsExporting(true);
 
-    const reportOutputText = output || "Geospatial inspection and AI spatial reasoning analysis completed for active Sentinel-2 raster layer.";
-
-    const payload = {
-      query: query || "Describe crop indices density, track spatial changes or detect water body boundaries...",
-      mode: mode,
-      confidence: confidence || 94.2,
-      metadata: {
-        FILE: metadata?.file || "sample_1200x883.tiff",
-        SIZE: metadata?.size || "142.60 MB",
-        RES: metadata?.res || "10 m (Sentinel-2)",
-        CRS: metadata?.crs || "EPSG:32643 (UTM Zone 43N)",
-        BANDS: metadata?.bands || "12 Channels",
-        DIM: metadata?.dim || "1200 x 883 px"
-      },
-      output_text: reportOutputText,
-      trace_logs: logs && logs.length > 0 ? logs.map(l => (typeof l === 'string' ? l : `[0${l.step}] ${l.text}`)) : [
-        "Ingesting co-registered Sentinel-1 SAR GRD and Sentinel-2 MSI rasters for AOI [EPSG:32643].",
-        "Applying radiometric calibration, speckle Lee-filtering (5x5 kernel), and terrain flattening.",
-        "Computing Normalized Difference Water Index (NDWI = (Green - NIR) / (Green + NIR)).",
-        "Extracting SAR backscatter threshold (VV < -14.8 dB) for cloud-penetrating water delineation."
-      ],
-      extra_report_data: extraReportData || {
-        is_flood_report: true,
-        report_title: "Geospatial Intelligence Executive Report",
-        alert_level: "OPTIMAL VEGETATION / SPATIAL ANALYSIS COMPLETE",
-        mission_id: "ISRO-SAC-26167",
-        extent_area: "2.4 ha",
-        time_utc: new Date().toISOString(),
-        confidence: `${confidence || 94.2}%`
-      }
-    };
-
     try {
+      // 1. Resolve active raster images (primary and bi-temporal after)
+      const targetImageSrc = customPayload.imageSrc || opticalImage || sarImage;
+      const base64Primary = await resolveImageToBase64(targetImageSrc);
+      const base64After = bitemporalAfter ? await resolveImageToBase64(bitemporalAfter) : null;
+
+      const activeQuery = customPayload.query || query || "Geospatial multi-modal raster inspection and spatial reasoning";
+      const activeOutput = customPayload.output_text || output || "Geospatial inspection and AI spatial reasoning analysis completed for active satellite raster layer.";
+      const activeConf = customPayload.confidence || confidence || 94.2;
+      const activeBoxes = customPayload.grounding_boxes || groundingBoxes || [];
+
+      // 2. Dynamically categorize report title and status based on real user query
+      const qLower = activeQuery.toLowerCase();
+      let dynamicTitle = "Geospatial Multi-Modal Intelligence Report";
+      let dynamicAlert = "ANALYSIS COMPLETE";
+
+      if (qLower.includes("water") || qLower.includes("flood") || qLower.includes("river") || qLower.includes("breach") || qLower.includes("lake")) {
+        dynamicTitle = "Hydrological & Water Surface Grounding Audit";
+        dynamicAlert = (qLower.includes("flood") || qLower.includes("breach")) ? "CRITICAL INUNDATION DETECTED" : "WATER BOUNDARIES RESOLVED";
+      } else if (qLower.includes("vegetation") || qLower.includes("ndvi") || qLower.includes("crop") || qLower.includes("canopy") || qLower.includes("forest")) {
+        dynamicTitle = "Vegetation Spectral Health & Canopy Index Report";
+        dynamicAlert = "OPTIMAL CANOPY HEALTH";
+      } else if (qLower.includes("urban") || qLower.includes("building") || qLower.includes("expansion") || qLower.includes("city") || qLower.includes("structure")) {
+        dynamicTitle = "Urban Expansion & Infrastructure Spatial Audit";
+        dynamicAlert = "BUILT ENVIRONMENT MAPPED";
+      } else if (qLower.includes("change") || qLower.includes("temporal") || qLower.includes("delta") || qLower.includes("shift") || mode === "bitemporal") {
+        dynamicTitle = "Bi-Temporal Differential Surface Change Detection";
+        dynamicAlert = "SURFACE DELTA CONFIRMED";
+      } else if (qLower.includes("cloud") || qLower.includes("mist") || qLower.includes("fog") || qLower.includes("sar")) {
+        dynamicTitle = "Atmospheric Penetration & All-Weather Radar Analysis";
+        dynamicAlert = "SAR RADAR PENETRATION ACTIVE";
+      }
+
+      const payload = {
+        query: activeQuery,
+        mode: mode,
+        confidence: typeof activeConf === 'number' ? activeConf : parseFloat(activeConf) || 94.2,
+        metadata: {
+          FILE: metadata?.file || "Sentinel2_MSI_raster.tif",
+          SIZE: metadata?.size || "142.60 MB",
+          RES: metadata?.res || "10.0 m (Sentinel-2)",
+          CRS: metadata?.crs || "EPSG:32643 (UTM Zone 43N)",
+          BANDS: metadata?.bands || "12 Spectral Channels",
+          DIM: metadata?.dim || "1200 x 883 px"
+        },
+        output_text: activeOutput,
+        trace_logs: logs && logs.length > 0 ? logs.map(l => (typeof l === 'string' ? l : `[0${l.step}] ${l.text}`)) : [
+          "Ingesting active co-registered satellite raster telemetry for target AOI.",
+          "Computing sensor reflectance metrics across spectral channels.",
+          "Executing multi-modal Vision-Language Model spatial reasoning kernel.",
+          "Resolving localized bounding coordinates and compiling dynamic PDF executive report."
+        ],
+        extra_report_data: {
+          report_title: dynamicTitle,
+          alert_level: dynamicAlert,
+          mission_id: "ISRO-SAC-26167",
+          extent_area: metadata?.dim || "2.4 ha",
+          time_utc: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
+          confidence: `${activeConf}%`,
+          answer: activeOutput
+        },
+        image_base64: base64Primary,
+        image_after_base64: base64After,
+        grounding_boxes: activeBoxes,
+        chat_history: customPayload.chat_history || null
+      };
+
       const response = await fetch(`${BACKEND_HTTP}/api/export_pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -584,24 +649,32 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
 
       if (!response.ok) throw new Error("PDF generation failed.");
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "satquery-executive-report.pdf";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      const rawBlob = await response.blob();
+      const pdfBlob = new Blob([rawBlob], { type: "application/pdf" });
+      const downloadUrl = window.URL.createObjectURL(pdfBlob);
+      const fileName = `satquery-executive-report-${Date.now()}.pdf`;
+
+      const downloadLink = document.createElement("a");
+      downloadLink.style.display = "none";
+      downloadLink.href = downloadUrl;
+      downloadLink.setAttribute("download", fileName);
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+
+      // Delay cleanup to allow browser download manager to complete saving with proper filename and extension
+      setTimeout(() => {
+        try {
+          if (downloadLink.parentNode) {
+            downloadLink.parentNode.removeChild(downloadLink);
+          }
+          window.URL.revokeObjectURL(downloadUrl);
+        } catch (cleanupErr) {
+          // ignore cleanup errors
+        }
+      }, 20000);
     } catch (err) {
       console.warn("PDF API export fallback:", err);
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
-      const a = document.createElement("a");
-      a.href = dataStr;
-      a.download = "satquery_executive_report.json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
     } finally {
       setIsExporting(false);
     }
@@ -623,27 +696,12 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
       {/* Floating High-Contrast Glass Header Bar */}
       <header className="relative z-10 h-12 px-4 sm:px-6 flex items-center justify-between rounded-2xl border border-white/10 bg-[#12131C]/90 shrink-0 backdrop-blur-2xl shadow-xl">
         <div className="flex items-center gap-2.5">
-          {onBackToHub && (
-            <button
-              onClick={onBackToHub}
-              title="Back to Mission Control Hub"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#08090C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#8B5CF6] text-[#C084FC] hover:text-white text-xs font-mono font-bold transition-all cursor-pointer shadow-sm backdrop-blur-md whitespace-nowrap"
-            >
-              <ChevronLeft className="w-3.5 h-3.5 text-[#C084FC]" />
-              <span>MISSION HUB</span>
-            </button>
-          )}
-          {onBackToHero && (
-            <button
-              onClick={onBackToHero}
-              title="Back to Space Entry Portal Landing Page"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#08090C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#10B981] text-[#34D399] hover:text-white text-xs font-mono font-bold transition-all cursor-pointer shadow-sm backdrop-blur-md whitespace-nowrap"
-            >
-              <span>PORTAL</span>
-            </button>
-          )}
           {/* Matching High-Tech Logo Emblem & Title */}
-          <div className="flex items-center gap-2.5 group cursor-pointer">
+          <div 
+            onClick={onBackToHub || onBackToHero}
+            title="SatQuery AI - Return to Command Hub"
+            className="flex items-center gap-2.5 group cursor-pointer"
+          >
             <div className="relative flex items-center justify-center w-8 h-8 rounded-xl overflow-hidden bg-[#08090C] border border-[#8B5CF6]/50 shadow-[0_0_14px_rgba(139,92,246,0.3)] backdrop-blur-md transition-all duration-300 group-hover:border-[#8B5CF6] shrink-0">
               <img 
                 src="/satquery_logo.png" 
@@ -1164,8 +1222,10 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
         {/* ============================================================ */}
         {/* SECTION C: CHAT-FIRST AGENTIC ANALYST (ChatGPT-style)        */}
         {/* ============================================================ */}
-        <aside className="w-full lg:w-[360px] xl:w-[420px] h-full flex flex-col shrink-0 overflow-hidden rounded-2xl bg-[#12131C]/90 backdrop-blur-2xl border border-white/10 shadow-xl">
+        <aside className="w-full lg:w-[320px] xl:w-[360px] h-full flex flex-col shrink-0 overflow-hidden rounded-2xl bg-[#12131C]/90 backdrop-blur-2xl border border-white/10 shadow-xl">
           <GeoChatbot
+            activeSessionId={activeSessionId}
+            onSessionUpdated={onSessionUpdated}
             workstationContext={{
               opticalImage,
               sarImage,
@@ -1180,9 +1240,6 @@ export default function Workstation({ mode: propMode, setMode: propSetMode, acti
               if (boxes) setGroundingBoxes(boxes);
               if (conf) setConfidence(conf);
               if (replyText) setOutput(replyText);
-              if (!opticalImage && !sarImage && !bitemporalAfter) {
-                loadSamplePreset(mode);
-              }
             }}
             onAddTraceLogs={(newLogs) => {
               setLogs(prev => [...prev, ...newLogs]);

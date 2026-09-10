@@ -8,8 +8,16 @@ import {
   ArrowLeft, 
   Sparkles, 
   AlertCircle,
-  Loader2
+  Loader2,
+  ShieldCheck
 } from 'lucide-react';
+import { 
+  loginWithEmail, 
+  registerWithEmail, 
+  loginWithGoogle, 
+  getFriendlyAuthErrorMessage 
+} from '../firebase/authService';
+import { isFirebaseConfigured } from '../firebase/config';
 
 export default function LoginPage({ onLoginSuccess, onBack }) {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -120,46 +128,77 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
     };
   }, []);
 
-  const finalizeLogin = (customName) => {
-    const userPayload = {
-      id: Date.now(),
-      email: email || "analyst.isro@satquery.gov.in",
-      name: customName || fullName || "Dr. Vikram S. Rao",
-      rank: "Senior Geospatial Scientist",
-      clearance: "ISRO Level-4 Orbital Access",
-      mission: "ISRO-EOS-FOUNDATION-AI"
-    };
-
-    setTimeout(() => {
-      setIsLoading(false);
-      if (onLoginSuccess) {
-        onLoginSuccess(userPayload);
-      }
-    }, 700);
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg(null);
     setIsLoading(true);
 
     if (isRegistering) {
       if (!fullName.trim() || !email.trim() || !password.trim()) {
-        setErrorMsg("Please fill in all fields.");
+        setErrorMsg("Please fill in all fields (Full Name, Email, and Password).");
         setIsLoading(false);
         return;
       }
-      setLoadingMessage("Creating your profile...");
-      setTimeout(() => {
+      if (password.length < 6) {
+        setErrorMsg("Password must be at least 6 characters long for secure Firebase accounts.");
+        setIsLoading(false);
+        return;
+      }
+
+      setLoadingMessage("Creating secure account in Firebase...");
+      try {
+        const realUser = await registerWithEmail(email, password, fullName);
         setLoadingMessage("Account created successfully!");
-        finalizeLogin(fullName);
-      }, 900);
+        setTimeout(() => {
+          setIsLoading(false);
+          if (onLoginSuccess) {
+            onLoginSuccess(realUser);
+          }
+        }, 600);
+      } catch (err) {
+        setIsLoading(false);
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
+      }
     } else {
-      const effectiveEmail = email.trim() || 'analyst.isro@satquery.gov.in';
-      setLoadingMessage("Signing into your workspace...");
+      if (!email.trim() || !password.trim()) {
+        setErrorMsg("Please enter both email and password.");
+        setIsLoading(false);
+        return;
+      }
+
+      setLoadingMessage("Authenticating with Firebase...");
+      try {
+        const realUser = await loginWithEmail(email, password);
+        setLoadingMessage("Access granted! Entering Mission Hub...");
+        setTimeout(() => {
+          setIsLoading(false);
+          if (onLoginSuccess) {
+            onLoginSuccess(realUser);
+          }
+        }, 600);
+      } catch (err) {
+        setIsLoading(false);
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
+      }
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setErrorMsg(null);
+    setIsLoading(true);
+    setLoadingMessage("Launching Google Secure Authentication...");
+    try {
+      const realUser = await loginWithGoogle();
+      setLoadingMessage("Google verification successful!");
       setTimeout(() => {
-        finalizeLogin(effectiveEmail.includes('@') ? effectiveEmail.split('@')[0] : effectiveEmail);
-      }, 850);
+        setIsLoading(false);
+        if (onLoginSuccess) {
+          onLoginSuccess(realUser);
+        }
+      }, 600);
+    } catch (err) {
+      setIsLoading(false);
+      setErrorMsg(getFriendlyAuthErrorMessage(err));
     }
   };
 
@@ -167,18 +206,22 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
     setErrorMsg(null);
     setIsLoading(true);
     setLoadingMessage("Authenticating Demo Credentials (Jury)...");
+    const demoUser = {
+      id: "demo-jury-user",
+      uid: "demo-jury-user",
+      email: "jury.evaluator@isro-sih2026.gov.in",
+      name: "ISRO Lead Analyst (Demo)",
+      rank: "Senior Geospatial Scientist",
+      clearance: "ISRO Level-4 Orbital Access",
+      mission: "ISRO-EOS-FOUNDATION-AI",
+      isRealAccount: false
+    };
     setTimeout(() => {
-      finalizeLogin("ISRO Lead Analyst (Demo)");
-    }, 800);
-  };
-
-  const handleSocialAuth = (provider) => {
-    setErrorMsg(null);
-    setIsLoading(true);
-    setLoadingMessage(`Connecting with ${provider}...`);
-    setTimeout(() => {
-      finalizeLogin(`${provider} Verified User`);
-    }, 900);
+      setIsLoading(false);
+      if (onLoginSuccess) {
+        onLoginSuccess(demoUser);
+      }
+    }, 700);
   };
 
   return (
@@ -244,10 +287,30 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
 
         <div className="relative z-10 w-full max-w-[430px] mx-auto">
           
-          {/* Header Title */}
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-wide text-white uppercase mb-7">
-            {isRegistering ? 'SIGN UP' : 'SIGN IN'}
-          </h2>
+          {/* Header Title & Firebase Status Badge */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-wide text-white uppercase">
+              {isRegistering ? 'SIGN UP' : 'SIGN IN'}
+            </h2>
+            {isFirebaseConfigured ? (
+              <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1.5 shadow-sm">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>Firebase Secure</span>
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-[10px] font-mono text-amber-300 font-bold flex items-center gap-1.5 shadow-sm" title="Configure VITE_FIREBASE_* in frontend/.env">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>Keys Pending (.env)</span>
+              </span>
+            )}
+          </div>
+
+          {/* Setup Guide Banner when Firebase keys are not yet configured */}
+          {!isFirebaseConfigured && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-[11px] text-amber-200/90 leading-relaxed font-sans">
+              <span className="font-bold text-amber-300">⚡ Setup Notice:</span> Paste your Firebase Project Web App keys into <code className="px-1 py-0.5 rounded bg-black/50 text-amber-300 font-mono">frontend/.env</code> to activate live Email & Google authentication. You can also use the <strong>Quick Demo Login</strong> button below for immediate access.
+            </div>
+          )}
 
           {/* Error Alert */}
           {errorMsg && (
@@ -278,11 +341,11 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
             <div className="relative flex items-center px-4 py-3.5 rounded-2xl bg-[#12131C] border border-white/10 focus-within:border-[#8B5CF6] focus-within:ring-2 focus-within:ring-[#8B5CF6]/30 transition-all">
               <Mail className="w-5 h-5 text-slate-300 shrink-0 mr-3" />
               <input
-                type="text"
+                type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email Address"
+                placeholder="Email Address (e.g. user@gmail.com)"
                 className="w-full bg-transparent text-sm text-white placeholder:text-slate-400 outline-none font-sans"
               />
             </div>
@@ -295,7 +358,7 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder={isRegistering ? "Password (min 6 characters)" : "Password"}
                 className="w-full bg-transparent text-sm text-white placeholder:text-slate-400 outline-none font-sans"
               />
               <button
@@ -320,7 +383,7 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
                     <span>{loadingMessage || 'PROCESSING...'}</span>
                   </>
                 ) : (
-                  <span>{isRegistering ? 'SIGN UP' : 'SIGN IN'}</span>
+                  <span>{isRegistering ? 'CREATE REAL ACCOUNT' : 'SIGN IN WITH FIREBASE'}</span>
                 )}
               </button>
             </div>
@@ -339,9 +402,9 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
                 {/* Google Button */}
                 <button
                   type="button"
-                  onClick={() => handleSocialAuth('Google')}
+                  onClick={handleGoogleAuth}
                   disabled={isLoading}
-                  className="flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl bg-[#12131C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#8B5CF6] text-white transition-all cursor-pointer group disabled:opacity-50"
+                  className="flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl bg-[#12131C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#8B5CF6] text-white transition-all cursor-pointer group disabled:opacity-50 shadow-sm"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -355,7 +418,11 @@ export default function LoginPage({ onLoginSuccess, onBack }) {
                 {/* ISRO SAC SSO Button */}
                 <button
                   type="button"
-                  onClick={() => handleSocialAuth('ISRO')}
+                  onClick={() => {
+                    setEmail("analyst.isro@satquery.gov.in");
+                    setPassword("Isro2026Secure!");
+                    setErrorMsg("ISRO SAC SSO credentials pre-loaded. Click SIGN IN.");
+                  }}
                   disabled={isLoading}
                   className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#12131C] hover:bg-[#1A1B26] border border-white/10 hover:border-[#10B981] text-white transition-all cursor-pointer group disabled:opacity-50"
                 >

@@ -6,6 +6,7 @@ import MissionHub from './components/MissionHub.jsx';
 import Workstation from './components/Workstation.jsx';
 import LoginPage from './components/LoginPage.jsx';
 import Footer from './components/Footer.jsx';
+import { subscribeToAuth, logoutUser } from './firebase/authService';
 
 export default function App() {
   const defaultUser = {
@@ -40,6 +41,38 @@ export default function App() {
 
   const [activeModality, setActiveModality] = useState('single');
   const [selectedModelDetail, setSelectedModelDetail] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [refreshSessionsTrigger, setRefreshSessionsTrigger] = useState(0);
+
+  // Subscribe to real-time Firebase Auth state changes across sessions & page refreshes
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth((realFirebaseUser) => {
+      if (realFirebaseUser) {
+        setAuthenticatedUser(realFirebaseUser);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('satquery_auth', JSON.stringify(realFirebaseUser));
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync real authenticated user with backend SQLite database
+  useEffect(() => {
+    if (authenticatedUser?.id) {
+      const backendHttp = import.meta.env.VITE_BACKEND_URL || "http://localhost:7001";
+      fetch(`${backendHttp}/api/history/users/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: authenticatedUser.id,
+          email: authenticatedUser.email || '',
+          name: authenticatedUser.name || '',
+          rank: authenticatedUser.rank || 'Senior Geospatial Analyst'
+        })
+      }).catch(() => {});
+    }
+  }, [authenticatedUser]);
 
   // Authentication Handlers
   const handleLoginSuccess = (user) => {
@@ -51,7 +84,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch (e) {
+      console.warn("Logout error:", e);
+    }
     setAuthenticatedUser(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('satquery_auth');
@@ -167,9 +205,12 @@ export default function App() {
 
     return (
       <div className="w-full min-h-screen bg-aurora-animated text-slate-100 overflow-x-hidden scroll-smooth flex flex-col">
-        {/* Section 1: Command Hub (Cleaned without Images 1, 3, 4, 5) */}
+        {/* Section 1: Command Hub with ChatGPT-Style Session History (Matching Image 1) */}
         <MissionHub 
           currentUser={authenticatedUser}
+          activeSessionId={activeSessionId}
+          onSelectSession={setActiveSessionId}
+          refreshTrigger={refreshSessionsTrigger}
           onLaunchWorkstation={(modalityId) => {
             setActiveModality(modalityId);
             setTimeout(scrollToWorkstation, 50);
@@ -179,10 +220,12 @@ export default function App() {
           onViewPortal={() => setCurrentRoute('home')}
         />
 
-        {/* Section 2: Interactive Geospatial Workstation (Image 2: Reached directly on scroll) */}
+        {/* Section 2: Interactive Geospatial Workstation */}
         <Workstation 
           currentUser={authenticatedUser}
           activeModality={activeModality}
+          activeSessionId={activeSessionId}
+          onSessionUpdated={() => setRefreshSessionsTrigger(prev => prev + 1)}
           onBackToHub={scrollToHub}
           onBackToHero={() => setCurrentRoute('home')}
           isAuthenticated={true}
