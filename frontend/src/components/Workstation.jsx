@@ -60,6 +60,7 @@ export default function Workstation({
   const [showGroundingOverlay, setShowGroundingOverlay] = useState(true);
   const [showGridOverlay, setShowGridOverlay] = useState(false);
   const [recenterToast, setRecenterToast] = useState(false);
+  const [pdfStatusToast, setPdfStatusToast] = useState(null);
 
   // Spectral LUT filter generator for raw and processed satellite imagery
   const getSpectralFilter = (preset) => {
@@ -616,7 +617,10 @@ export default function Workstation({
     if (!src || typeof src !== 'string') return null;
     if (src.startsWith('data:image')) return src;
     try {
-      const res = await fetch(src);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(src, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const blob = await res.blob();
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -634,6 +638,7 @@ export default function Workstation({
   const handleExportPDF = async (customPayload = {}) => {
     if (isExporting) return;
     setIsExporting(true);
+    setPdfStatusToast({ type: 'loading', message: 'Generating Executive White A4 PDF Report...' });
 
     try {
       // 1. Resolve active raster images (primary and bi-temporal after)
@@ -708,7 +713,7 @@ export default function Workstation({
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error("PDF generation failed.");
+      if (!response.ok) throw new Error("PDF generation failed with status: " + response.status);
 
       const rawBlob = await response.blob();
       const pdfBlob = new Blob([rawBlob], { type: "application/pdf" });
@@ -723,6 +728,9 @@ export default function Workstation({
       document.body.appendChild(downloadLink);
       downloadLink.click();
 
+      setPdfStatusToast({ type: 'success', message: 'White A4 PDF Report Downloaded!' });
+      setTimeout(() => setPdfStatusToast(null), 3500);
+
       // Delay cleanup to allow browser download manager to complete saving with proper filename and extension
       setTimeout(() => {
         try {
@@ -736,6 +744,8 @@ export default function Workstation({
       }, 20000);
     } catch (err) {
       console.warn("PDF API export fallback:", err);
+      setPdfStatusToast({ type: 'error', message: 'PDF Generation failed. Please try again.' });
+      setTimeout(() => setPdfStatusToast(null), 4000);
     } finally {
       setIsExporting(false);
     }
@@ -746,6 +756,35 @@ export default function Workstation({
       id="workstation-viewport" 
       className="relative w-full h-screen min-h-screen flex flex-col overflow-hidden font-sans select-none antialiased text-white bg-[#08090C] p-2.5 sm:p-3.5 gap-2.5 sm:gap-3"
     >
+      {/* Dynamic Toast Feedback HUD (PDF Export & Viewport Recenter) */}
+      {pdfStatusToast && (
+        <div 
+          id="pdf-status-toast"
+          data-testid="pdf-status-toast"
+          className={`absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl backdrop-blur-xl border flex items-center gap-2.5 text-xs font-bold shadow-2xl animate-fadeIn ${
+            pdfStatusToast.type === 'error'
+              ? 'bg-rose-950/95 border-rose-500/60 text-rose-200'
+              : pdfStatusToast.type === 'success'
+              ? 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200'
+              : 'bg-[#12131C]/95 border-[#8B5CF6]/50 text-white'
+          }`}
+        >
+          {pdfStatusToast.type === 'loading' && <span className="w-3 h-3 border-2 border-[#EC4899] border-t-transparent rounded-full animate-spin" />}
+          {pdfStatusToast.type === 'success' && <Check className="w-4 h-4 text-[#10B981]" />}
+          {pdfStatusToast.type === 'error' && <AlertCircle className="w-4 h-4 text-[#F43F5E]" />}
+          <span>{pdfStatusToast.message}</span>
+        </div>
+      )}
+
+      {recenterToast && (
+        <div 
+          id="recenter-toast"
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-xl bg-[#08090C]/95 border border-[#8B5CF6]/50 text-white text-xs backdrop-blur-xl flex items-center gap-2 shadow-2xl animate-fadeIn"
+        >
+          <Crosshair className="w-3.5 h-3.5 text-[#10B981]" />
+          <span>AOI Viewport Centered</span>
+        </div>
+      )}
       
       {/* Dynamic Ambient Glow Orbs (Amethyst Violet & Cyber Emerald) */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">

@@ -51,9 +51,10 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Space Grotesk', 'Orbitron', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+        sans: ['Philosopher', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['Philosopher', 'Space Grotesk', 'Orbitron', 'sans-serif'],
+        philosopher: ['Philosopher', 'sans-serif'],
+        mono: ['Philosopher', 'JetBrains Mono', 'monospace']
       },
       boxShadow: {
         'glow-emerald': '0 0 20px rgba(16, 185, 129, 0.35)',
