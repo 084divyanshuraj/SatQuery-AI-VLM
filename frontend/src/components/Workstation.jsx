@@ -20,7 +20,12 @@ import {
   Eye,
   EyeOff,
   Sliders,
-  Maximize2 
+  Maximize2,
+  Sun,
+  Cloud,
+  CloudSun,
+  CloudRain,
+  Droplets
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
 
@@ -179,6 +184,55 @@ export default function Workstation({
   const [isLocating, setIsLocating] = useState(false);
   const [telemetryViewMode, setTelemetryViewMode] = useState('aoi'); // 'aoi' | 'gps'
 
+  // Live Atmospheric Weather State (Open-Meteo High-Resolution Satellite & Surface Weather)
+  const [weatherData, setWeatherData] = useState({
+    temp: null,
+    feelsLike: null,
+    condition: "Fair",
+    humidity: null,
+    windSpeed: null,
+    code: 0,
+    loading: true
+  });
+
+  const fetchLiveWeather = async (latitude, longitude) => {
+    if (!latitude || !longitude) return;
+    try {
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const cur = data.current;
+        if (cur) {
+          const code = cur.weather_code;
+          let cond = 'Clear Sky';
+          if (code === 0) cond = 'Clear Sky';
+          else if (code === 1) cond = 'Mainly Clear';
+          else if (code === 2) cond = 'Partly Sunny';
+          else if (code === 3) cond = 'Overcast';
+          else if ([45, 48].includes(code)) cond = 'Foggy';
+          else if ([51, 53, 55, 56, 57].includes(code)) cond = 'Drizzle';
+          else if ([61, 63, 65, 80, 81, 82].includes(code)) cond = 'Rain';
+          else if ([71, 73, 75, 77, 85, 86].includes(code)) cond = 'Snow';
+          else if ([95, 96, 99].includes(code)) cond = 'Thunderstorm';
+
+          setWeatherData({
+            temp: Math.round(cur.temperature_2m),
+            feelsLike: Math.round(cur.apparent_temperature),
+            humidity: Math.round(cur.relative_humidity_2m),
+            windSpeed: Math.round(cur.wind_speed_10m),
+            condition: cond,
+            code: code,
+            loading: false
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Live weather fetch:", err);
+    }
+  };
+
   // Live ticking clock updating every 1000ms
   useEffect(() => {
     const timer = setInterval(() => {
@@ -197,17 +251,20 @@ export default function Workstation({
       if (res.ok) {
         const data = await res.json();
         if (data.geolocation) {
+          const sLat = data.geolocation.lat || 16.2322;
+          const sLon = data.geolocation.lon || 80.5484;
           setGeoData(prev => ({
             ...prev,
             city: data.geolocation.city || prev.city,
             region: data.geolocation.region || prev.region,
             country: data.geolocation.country || prev.country,
-            lat: data.geolocation.lat || prev.lat,
-            lon: data.geolocation.lon || prev.lon,
+            lat: sLat,
+            lon: sLon,
             timezone: data.geolocation.timezone || prev.timezone,
             source: "NETWORK_GATEWAY",
             status: "LOCKED"
           }));
+          fetchLiveWeather(sLat, sLon);
         }
       }
     } catch (e) {
@@ -230,6 +287,8 @@ export default function Workstation({
             source: "GPS_HARDWARE",
             status: "HARDWARE_LOCKED"
           }));
+
+          fetchLiveWeather(lat, lon);
 
           // Reverse geocode via OpenStreetMap Nominatim for exact city name
           try {
@@ -268,6 +327,13 @@ export default function Workstation({
 
   useEffect(() => {
     acquireLiveLocation();
+    fetchLiveWeather(16.2322, 80.5484); // Pre-warm weather with default coordinates
+    const weatherInterval = setInterval(() => {
+      if (geoData.lat && geoData.lon) {
+        fetchLiveWeather(geoData.lat, geoData.lon);
+      }
+    }, 300000); // 5 min interval
+    return () => clearInterval(weatherInterval);
   }, []);
 
   const formattedDate = currentTime.toLocaleDateString('en-US', {
@@ -1040,12 +1106,42 @@ export default function Workstation({
             </span>
           </div>
 
+          <span className="text-white/20">|</span>
+
+          {/* Real Live Weather Node */}
+          <div 
+            className="flex items-center gap-2 text-white/90"
+            title={`Live Atmospheric Telemetry: ${weatherData.condition} (${weatherData.temp !== null ? weatherData.temp : '--'}°C), Humidity: ${weatherData.humidity !== null ? weatherData.humidity : '--'}%, Wind: ${weatherData.windSpeed !== null ? weatherData.windSpeed : '--'} km/h`}
+          >
+            {weatherData.code === 0 || weatherData.code === 1 ? (
+              <Sun className="w-4 h-4 text-[#FBBF24] shrink-0 animate-pulse" />
+            ) : weatherData.code === 2 ? (
+              <CloudSun className="w-4 h-4 text-[#38BDF8] shrink-0" />
+            ) : [61, 63, 65, 80, 81, 82].includes(weatherData.code) ? (
+              <CloudRain className="w-4 h-4 text-[#60A5FA] shrink-0" />
+            ) : (
+              <Cloud className="w-4 h-4 text-[#38BDF8] shrink-0" />
+            )}
+            <span className="font-bold text-[#38BDF8] text-xs sm:text-sm tracking-wide">
+              {weatherData.temp !== null ? `${weatherData.temp}°C` : '--°C'}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-200">
+              {weatherData.condition}
+            </span>
+            {weatherData.humidity !== null && (
+              <span className="hidden xl:inline-flex items-center gap-1 text-[10px] text-slate-400">
+                <Droplets className="w-3 h-3 text-[#38BDF8]/70" />
+                {weatherData.humidity}%
+              </span>
+            )}
+          </div>
+
           {/* Re-Sync Button with spinning animation */}
           <button
             type="button"
             onClick={acquireLiveLocation}
             disabled={isLocating}
-            title="Re-acquire Live GPS Fix & Recalibrate Clock"
+            title="Re-acquire Live GPS Fix, Weather & Recalibrate Clock"
             className="ml-1 p-1.5 rounded-full hover:bg-white/10 text-[#34D399] hover:text-white transition cursor-pointer"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-[#34D399]' : ''}`} />
