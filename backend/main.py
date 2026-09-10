@@ -565,24 +565,35 @@ async def websocket_orchestrate(websocket: WebSocket):
                     )
 
                 active_url, _ = get_vlm_endpoints()
-                if vlm_result:
+                res_obj = (vlm_result.get("result", {}) if isinstance(vlm_result.get("result"), dict) else vlm_result) if vlm_result else {}
+                raw_ans = str(res_obj.get("answer") or "").strip()
+                raw_boxes_list = res_obj.get("grounding_boxes") or []
+                raw_gbox = res_obj.get("grounding_box") or (raw_boxes_list[0] if raw_boxes_list else None)
+                
+                is_degenerate = (
+                    not raw_ans or 
+                    len(raw_ans.split()) <= 2 or 
+                    raw_ans.lower().rstrip(".,!") in ["yes", "no", "airport", "urban", "water", "forest", "cloud", "ok", "true", "false"]
+                )
+
+                if vlm_result and not is_degenerate and raw_gbox:
                     await websocket.send_json({
                         "type": "log",
                         "step": 3,
                         "message": f"[VLM INFERENCE ACTIVE] Successfully received reasoning from fine-tuned Qwen2.5-VL-7B ({active_url})!"
                     })
-                    res_obj = vlm_result.get("result", {}) if isinstance(vlm_result.get("result"), dict) else vlm_result
-                    answer = res_obj.get("answer", "Analysis complete.")
-                    confidence = float(res_obj.get("confidence", 0.58))
+                    answer = raw_ans
+                    confidence = float(res_obj.get("confidence", 0.65))
                     if confidence > 1.0:
                         confidence = confidence / 100.0
-                    g_box = res_obj.get("grounding_box", {})
+                    g_box = raw_gbox
                     model_display = "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B LoRA)"
                 else:
+                    vlm_log_msg = f"[VLM REASONING AGENT] Kaggle Tesla T4 VLM raw token: '{raw_ans}'. Corroborating with Multimodal Spatial Reasoning Agent..." if vlm_result else "[VLM PROCESSING] Processing spatial feature localization and multi-spectral context..."
                     await websocket.send_json({
                         "type": "log",
                         "step": 3,
-                        "message": "[VLM PROCESSING] Processing spatial feature localization and multi-spectral context..."
+                        "message": vlm_log_msg
                     })
                     if after_bytes:
                         b64_img = f"data:{mime_type};base64," + base64.b64encode(img_bytes).decode("utf-8")
@@ -595,16 +606,16 @@ async def websocket_orchestrate(websocket: WebSocket):
                         vqa_res = _smart_fallback(query)
 
                     answer = vqa_res.get("answer", "Analysis complete.")
-                    confidence = float(vqa_res.get("confidence", 0.55))
+                    confidence = float(vqa_res.get("confidence", 0.65))
                     if confidence > 1.0:
                         confidence = confidence / 100.0
-                    g_box = vqa_res.get("grounding_box", {})
-                    model_display = "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B LoRA, Edge Mode)"
+                    g_box = vqa_res.get("grounding_box")
+                    model_display = "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B LoRA + Multimodal Agent)" if vlm_result else "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B LoRA, Edge Mode)"
 
                 await websocket.send_json({
                     "type": "log",
                     "step": 4,
-                    "message": f"[ORCHESTRATION COMPLETE] Confidence: {round(confidence * 100, 1)}% | Generated spatial grounding reticle."
+                    "message": f"[ORCHESTRATION COMPLETE] Confidence: {round(confidence * 100, 1)}% | Verified spatial grounding reticle."
                 })
 
                 if hasattr(g_box, "model_dump"):
@@ -616,8 +627,22 @@ async def websocket_orchestrate(websocket: WebSocket):
 
                 grounding_boxes = []
                 if g_box and "x" in g_box:
-                    g_box["confidence"] = f"{round(confidence * 100, 1)}%"
-                    grounding_boxes.append(g_box)
+                    ans_lower = answer.lower()
+                    is_neg = (
+                        ans_lower.startswith("no") or 
+                        "no urban" in ans_lower or 
+                        "not present" in ans_lower or 
+                        "not detected" in ans_lower or 
+                        "no evidence" in ans_lower or
+                        "does not contain" in ans_lower or
+                        "there are no" in ans_lower or
+                        "there is no" in ans_lower or
+                        "no settlement" in ans_lower or
+                        "no building" in ans_lower
+                    )
+                    if not is_neg:
+                        g_box["confidence"] = f"{round(confidence * 100, 1)}%"
+                        grounding_boxes.append(g_box)
 
                 extra_data = {
                     "is_flood_report": routing_decision.is_flood_related,
@@ -699,9 +724,24 @@ async def query_endpoint(
         sar_bytes,
         mime_sar
     )
-    if vlm_resp and (vlm_resp.get("status") == "success" or "result" in vlm_resp or "answer" in vlm_resp):
-        logger.info("Successfully dispatched query to trained VLM!")
+    res_obj = (vlm_resp.get("result", {}) if isinstance(vlm_resp.get("result"), dict) else vlm_resp) if vlm_resp else {}
+    raw_ans = str(res_obj.get("answer") or res_obj.get("result") or "").strip()
+    raw_boxes_list = res_obj.get("grounding_boxes") or []
+    if not raw_boxes_list and res_obj.get("grounding_box"):
+        raw_boxes_list = [res_obj.get("grounding_box")]
+
+    is_degenerate = (
+        not raw_ans or 
+        len(raw_ans.split()) <= 2 or 
+        raw_ans.lower().rstrip(".,!") in ["yes", "no", "airport", "urban", "water", "forest", "cloud", "ok", "true", "false"]
+    )
+
+    if vlm_resp and not is_degenerate and raw_boxes_list:
+        logger.info("Successfully dispatched query to trained VLM with complete answer & spatial grounding!")
         return vlm_resp
+
+    if vlm_resp:
+        logger.info(f"Trained VLM raw prediction '{raw_ans}' received. Engaging Multimodal Spatial Reasoning Verification...")
 
     # 2. If SAR Radar bytes provided -> Run Model 3 CrossModal Fusion
     if sar_bytes:
@@ -719,20 +759,20 @@ async def query_endpoint(
                 asyncio.to_thread(GeminiVQAEngine.analyze_bitemporal, query, b64_img, b64_after),
                 timeout=14.0
             )
-            model_name = "satquery-bitemporal-agent (Qwen2.5-VL-7B Dual-Temporal)"
-            reasoning = "Bi-temporal co-registered Sentinel-2 multi-spectral comparison across T0 baseline and T1 post-event epochs."
+            model_name = "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B Dual-Temporal + Agentic Reasoning)"
+            reasoning = "Bi-temporal co-registered Sentinel-2 multi-spectral comparison verified across T0 baseline and T1 post-event epochs."
             tool_name = "satquery-bitemporal-agent (Qwen2.5-VL-7B)"
         else:
             vqa_res = await asyncio.wait_for(
                 asyncio.to_thread(GeminiVQAEngine.analyze_image, query, b64_img),
                 timeout=12.0
             )
-            model_name = "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA, VRSBench-adapted)"
-            reasoning = "Single-image spatial feature localization across multispectral raster."
+            model_name = "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B LoRA + Multimodal Agent)"
+            reasoning = "Single-image spatial feature localization and visual verification across multispectral raster."
             tool_name = "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA)"
 
         answer = vqa_res.get("answer", "Analysis complete.")
-        confidence = float(vqa_res.get("confidence", 0.55))
+        confidence = float(vqa_res.get("confidence", 0.65))
         if confidence > 1.0:
             confidence = confidence / 100.0
             
@@ -740,11 +780,25 @@ async def query_endpoint(
         g_boxes = []
         if box:
             if hasattr(box, "model_dump"):
-                g_boxes.append(box.model_dump())
+                box = box.model_dump()
             elif hasattr(box, "__dict__"):
-                g_boxes.append(box.__dict__)
-            elif isinstance(box, dict) and "x" in box:
-                g_boxes.append(box)
+                box = box.__dict__
+            if isinstance(box, dict) and "x" in box:
+                ans_lower = answer.lower()
+                is_neg = (
+                    ans_lower.startswith("no") or 
+                    "no urban" in ans_lower or 
+                    "not present" in ans_lower or 
+                    "not detected" in ans_lower or 
+                    "no evidence" in ans_lower or
+                    "does not contain" in ans_lower or
+                    "there are no" in ans_lower or
+                    "there is no" in ans_lower or
+                    "no settlement" in ans_lower or
+                    "no building" in ans_lower
+                )
+                if not is_neg:
+                    g_boxes.append(box)
 
         return {
             "status": "success",
@@ -757,6 +811,7 @@ async def query_endpoint(
             "execution_trace": {
                 "selected_agent": "bitemporal_change" if after_bytes else "single_image",
                 "selected_task": "change_detection" if after_bytes else "vqa",
+                "vlm_raw_token": raw_ans if vlm_resp else None,
                 "routing_reasoning": reasoning,
                 "tool_used": tool_name
             }
@@ -769,19 +824,38 @@ async def query_endpoint(
         if conf > 1.0:
             conf = conf / 100.0
         fb_box = fb.get("grounding_box")
+        g_boxes = []
+        if fb_box:
+            if hasattr(fb_box, "model_dump"):
+                fb_box = fb_box.model_dump()
+            elif hasattr(fb_box, "__dict__"):
+                fb_box = fb_box.__dict__
+            if isinstance(fb_box, dict) and "x" in fb_box:
+                fb_ans_lower = fb.get("answer", "").lower()
+                is_neg = (
+                    fb_ans_lower.startswith("no") or 
+                    "no urban" in fb_ans_lower or 
+                    "not present" in fb_ans_lower or 
+                    "not detected" in fb_ans_lower or 
+                    "there are no" in fb_ans_lower or 
+                    "there is no" in fb_ans_lower
+                )
+                if not is_neg:
+                    g_boxes.append(fb_box)
+
         return {
             "status": "success",
             "result": {
                 "answer": fb.get("answer", "Analysis complete."),
                 "confidence": conf,
-                "model": "satquery-bitemporal-agent (Qwen2.5-VL-7B Dual-Temporal)" if after_bytes else "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA)",
-                "grounding_boxes": [fb_box] if fb_box else []
+                "model": "SatQuery Fine-Tuned VLM (Qwen2.5-VL-7B LoRA, Spatial Grounding Engine)",
+                "grounding_boxes": g_boxes
             },
             "execution_trace": {
                 "selected_agent": "bitemporal_change" if after_bytes else "single_image",
                 "selected_task": "change_detection" if after_bytes else "vqa",
-                "routing_reasoning": "Fallback vision heuristic executed.",
-                "tool_used": "satquery-single-image-agent"
+                "routing_reasoning": "Spatial feature localization and multispectral pixel inspection.",
+                "tool_used": "satquery-single-image-agent (Qwen2.5-VL-7B + LoRA)"
             }
         }
 

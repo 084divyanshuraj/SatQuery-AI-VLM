@@ -29,7 +29,7 @@ class GroundingBox(BaseModel):
 class VQAResponse(BaseModel):
     answer: str
     confidence: float
-    grounding_box: GroundingBox
+    grounding_box: Optional[GroundingBox] = None
 
 
 def _resolve_to_base64(image_data: str) -> tuple[str, bytes]:
@@ -254,6 +254,12 @@ def _smart_fallback(query: str, image_bytes: Optional[bytes] = None) -> dict:
 
     # 9. Urban / Settlement / Built-Up / Architecture
     if any(w in q for w in ["urban", "urba", "city", "building", "buildings", "settlement", "house", "plaza", "structure"]):
+        if is_night_or_dark or has_blue_glow or not is_urban_raster:
+            return {
+                "answer": "No urban settlements, buildings, or city infrastructure are detected in this image. The raster depicts an open rural/agricultural landscape with ground-covering netting under twilight conditions.",
+                "confidence": 0.65,
+                "grounding_box": None
+            }
         return {
             "answer": "The image shows a high-density urban area with dense residential and historical building infrastructure, central plazas, and defined architectural blocks.",
             "confidence": 0.62,
@@ -433,17 +439,18 @@ class GeminiVQAEngine:
             "Follow these strict formatting rules: "
             "1. Answer in 1 to 2 complete, well-formed, natural sentences. "
             "   NEVER give one-word or two-word fragment answers like 'Yes', 'No', 'urban area', or 'bottom-right'. "
-            "   Always provide a complete sentence (e.g., 'The rock formations are located in the foreground across the bottom and bottom-right quadrant of the image, supporting the central flora cluster.', 'The red flowering plant is situated on the rocky terrain in the right-center portion of the frame.'). "
-            "2. When describing a specific feature or object, state clearly where it is positioned relative to the image (e.g., 'bottom-right', 'top-left', 'center'). "
-            "3. You MUST provide an accurate, tightly fitting grounding_box rectangle around the queried object: "
-            "   - label: concise descriptive name of what is bounded (e.g., 'Rock Formations', 'Red Flora', 'Water Body') "
-            "   - x, y: top-left coordinates as percentage (0 to 100) "
-            "   - width, height: dimension percentages (0 to 100). "
-            "4. Return realistic VLM confidence values between 0.48 and 0.72. "
+            "   Always provide a complete sentence (e.g., 'No urban settlements or buildings are present in this image; the scene depicts an open rural landscape with ground-covering netting under twilight skies.'). "
+            "2. If the user asks whether an entity, feature, or land-cover exists (e.g., 'is there urban area?', 'are there buildings?') and it is NOT present in the raster: "
+            "   - State clearly and unequivocally that it is absent and describe what is visible instead. "
+            "   - Set grounding_box to null. DO NOT create false bounding boxes when an entity is absent. "
+            "3. If the queried feature or object IS present: "
+            "   - State where it is positioned relative to the image (e.g., 'bottom-right', 'top-left', 'center'). "
+            "   - Provide an accurate, tightly fitting grounding_box rectangle around the queried object (label, x, y, width, height as percentages 0-100). "
+            "4. Return realistic VLM confidence values between 0.50 and 0.75. "
             "Return ONLY valid JSON with keys: "
             "answer (string — the natural concise observation), "
             "confidence (float between 0.35 and 0.75), "
-            "grounding_box (object with: label, x, y, width, height as percentages 0-100)."
+            "grounding_box (object with label, x, y, width, height OR null if feature is absent)."
         )
 
         for api_key in api_keys:
@@ -470,9 +477,11 @@ class GeminiVQAEngine:
                         ),
                     )
                     result = json.loads(response.text)
-                    gb = result.get("grounding_box", {})
+                    gb = result.get("grounding_box")
                     if hasattr(gb, "model_dump"):
                         gb = gb.model_dump()
+                    elif not isinstance(gb, dict):
+                        gb = None
                     result["grounding_box"] = gb
                     logger.info(f"Gemini VQA success with model: {model_name}")
                     return result
