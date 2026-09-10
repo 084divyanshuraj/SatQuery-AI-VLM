@@ -1072,55 +1072,55 @@ export default function Workstation({
         </div>
 
         {/* Real Live Indian / User Standard Time & Local Weather Node */}
-        <div className="hidden md:flex items-center gap-3.5 text-xs sm:text-sm font-mono">
+        <div className="hidden md:flex items-center gap-2.5 lg:gap-3.5 text-xs sm:text-sm font-mono overflow-hidden">
           
           {/* Real Live Date & Time */}
-          <div className="flex items-center gap-2 text-white/90">
-            <Calendar className="w-4 h-4 text-[#C084FC] shrink-0" />
+          <div className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-[#C084FC] shrink-0" />
             <span className="font-semibold text-white tracking-wide">
               {formattedDate}
             </span>
           </div>
 
-          <span className="text-white/20">|</span>
+          <span className="text-white/20 shrink-0">|</span>
 
           {/* Real Live Digital Clock */}
-          <div className="flex items-center gap-2 text-white/90">
-            <Clock className="w-4 h-4 text-[#34D399] shrink-0" />
-            <span className="font-bold text-[#34D399] tracking-wider text-sm sm:text-base">
+          <div className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0">
+            <Clock className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
+            <span className="font-bold text-[#34D399] tracking-wider text-xs sm:text-sm">
               {formattedTime}
             </span>
             <span className="text-[10px] text-slate-400 font-medium">{timeZoneName.split('/').pop()?.replace('_', ' ')}</span>
           </div>
 
-          <span className="text-white/20">|</span>
+          <span className="text-white/20 shrink-0">|</span>
 
           {/* Real Live Location & GPS Fix */}
-          <div className="flex items-center gap-2 text-white/90">
-            <MapPin className="w-4 h-4 text-[#F43F5E] shrink-0" />
+          <div className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0">
+            <MapPin className="w-3.5 h-3.5 text-[#F43F5E] shrink-0" />
             <span className="font-semibold text-[#FDA4AF] text-xs sm:text-sm">
               {geoData.city ? `${geoData.city}, ${geoData.country}` : `${geoData.lat.toFixed(4)}°, ${geoData.lon.toFixed(4)}°`}
             </span>
-            <span className="text-[10px] text-slate-400">
+            <span className="text-[10px] text-slate-400 hidden xl:inline">
               ({geoData.lat.toFixed(4)}°N, {geoData.lon.toFixed(4)}°E)
             </span>
           </div>
 
-          <span className="text-white/20">|</span>
+          <span className="text-white/20 shrink-0">|</span>
 
           {/* Real Live Weather Node */}
           <div 
-            className="flex items-center gap-2 text-white/90"
+            className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0 bg-white/5 px-2.5 py-1 rounded-full border border-white/10"
             title={`Live Atmospheric Telemetry: ${weatherData.condition} (${weatherData.temp !== null ? weatherData.temp : '--'}°C), Humidity: ${weatherData.humidity !== null ? weatherData.humidity : '--'}%, Wind: ${weatherData.windSpeed !== null ? weatherData.windSpeed : '--'} km/h`}
           >
             {weatherData.code === 0 || weatherData.code === 1 ? (
-              <Sun className="w-4 h-4 text-[#FBBF24] shrink-0 animate-pulse" />
+              <Sun className="w-3.5 h-3.5 text-[#FBBF24] shrink-0 animate-pulse" />
             ) : weatherData.code === 2 ? (
-              <CloudSun className="w-4 h-4 text-[#38BDF8] shrink-0" />
+              <CloudSun className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
             ) : [61, 63, 65, 80, 81, 82].includes(weatherData.code) ? (
-              <CloudRain className="w-4 h-4 text-[#60A5FA] shrink-0" />
+              <CloudRain className="w-3.5 h-3.5 text-[#60A5FA] shrink-0" />
             ) : (
-              <Cloud className="w-4 h-4 text-[#38BDF8] shrink-0" />
+              <Cloud className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
             )}
             <span className="font-bold text-[#38BDF8] text-xs sm:text-sm tracking-wide">
               {weatherData.temp !== null ? `${weatherData.temp}°C` : '--°C'}
@@ -1129,7 +1129,7 @@ export default function Workstation({
               {weatherData.condition}
             </span>
             {weatherData.humidity !== null && (
-              <span className="hidden xl:inline-flex items-center gap-1 text-[10px] text-slate-400">
+              <span className="hidden xl:inline-flex items-center gap-0.5 text-[10px] text-slate-400 pl-1 border-l border-white/10">
                 <Droplets className="w-3 h-3 text-[#38BDF8]/70" />
                 {weatherData.humidity}%
               </span>
@@ -1142,7 +1142,7 @@ export default function Workstation({
             onClick={acquireLiveLocation}
             disabled={isLocating}
             title="Re-acquire Live GPS Fix, Weather & Recalibrate Clock"
-            className="ml-1 p-1.5 rounded-full hover:bg-white/10 text-[#34D399] hover:text-white transition cursor-pointer"
+            className="p-1 rounded-full hover:bg-white/10 text-[#34D399] hover:text-white transition cursor-pointer shrink-0"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-[#34D399]' : ''}`} />
           </button>
