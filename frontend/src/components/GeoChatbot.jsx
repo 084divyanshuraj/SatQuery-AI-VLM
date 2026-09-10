@@ -12,7 +12,8 @@ import {
   Activity,
   Pause,
   Play,
-  Square
+  Square,
+  Plus
 } from 'lucide-react';
 
 const SUGGESTION_CHIPS = [
@@ -50,7 +51,8 @@ export default function GeoChatbot({
   backendUrl = "http://localhost:7001",
   activeSessionId,
   onSessionUpdated,
-  onMessagesChange
+  onMessagesChange,
+  onNewChat
 }) {
   const [messages, setMessages] = useState([
     {
@@ -68,6 +70,27 @@ export default function GeoChatbot({
       onMessagesChange(messages);
     }
   }, [messages, onMessagesChange]);
+
+  // Announce newly uploaded raster in chat to establish clean image context
+  const prevRasterRef = useRef(null);
+  useEffect(() => {
+    const currentFile = workstationContext?.metadata?.file;
+    if (currentFile && prevRasterRef.current && currentFile !== prevRasterRef.current) {
+      prevRasterRef.current = currentFile;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `raster-upload-${Date.now()}`,
+          role: 'assistant',
+          text: `🛰️ **New Satellite Raster Active**: \`${currentFile}\`\nSpatial extent parsed. Previous session archived. Ready for fresh spatial interrogation.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          confidence: 100
+        }
+      ]);
+    } else if (currentFile && !prevRasterRef.current) {
+      prevRasterRef.current = currentFile;
+    }
+  }, [workstationContext?.metadata?.file]);
 
   // Load session messages from database whenever activeSessionId changes
   useEffect(() => {
@@ -827,6 +850,22 @@ export default function GeoChatbot({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          <button 
+            type="button" 
+            onClick={() => {
+              if (onNewChat) {
+                onNewChat();
+              } else {
+                handleClearChat();
+              }
+            }}
+            title="Start New Chat & Fresh Analysis Session" 
+            aria-label="Start new chat session"
+            className="px-2 py-1 rounded-md bg-[#8B5CF6]/20 hover:bg-[#8B5CF6]/40 border border-[#8B5CF6]/50 text-slate-200 hover:text-white transition cursor-pointer flex items-center gap-1 text-[10px] font-mono font-semibold shadow-sm group"
+          >
+            <Plus className="w-3 h-3 text-[#10B981] group-hover:rotate-90 transition-transform duration-200" />
+            <span className="hidden sm:inline">New Chat</span>
+          </button>
           {onExportPDF && (
             <button 
               type="button" 

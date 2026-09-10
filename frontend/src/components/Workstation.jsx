@@ -20,7 +20,12 @@ import {
   Eye,
   EyeOff,
   Sliders,
-  Maximize2 
+  Maximize2,
+  Sun,
+  Cloud,
+  CloudSun,
+  CloudRain,
+  Droplets
 } from 'lucide-react';
 import GeoChatbot from './GeoChatbot.jsx';
 
@@ -34,7 +39,9 @@ export default function Workstation({
   onLogoutClick, 
   currentUser,
   activeSessionId,
-  onSessionUpdated 
+  onSessionUpdated,
+  onCreateNewSession,
+  onSelectSession
 }) {
   const [internalMode, setInternalMode] = useState(propMode || activeModality || 'single');
   const mode = propMode || internalMode;
@@ -177,6 +184,55 @@ export default function Workstation({
   const [isLocating, setIsLocating] = useState(false);
   const [telemetryViewMode, setTelemetryViewMode] = useState('aoi'); // 'aoi' | 'gps'
 
+  // Live Atmospheric Weather State (Open-Meteo High-Resolution Satellite & Surface Weather)
+  const [weatherData, setWeatherData] = useState({
+    temp: null,
+    feelsLike: null,
+    condition: "Fair",
+    humidity: null,
+    windSpeed: null,
+    code: 0,
+    loading: true
+  });
+
+  const fetchLiveWeather = async (latitude, longitude) => {
+    if (!latitude || !longitude) return;
+    try {
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const cur = data.current;
+        if (cur) {
+          const code = cur.weather_code;
+          let cond = 'Clear Sky';
+          if (code === 0) cond = 'Clear Sky';
+          else if (code === 1) cond = 'Mainly Clear';
+          else if (code === 2) cond = 'Partly Sunny';
+          else if (code === 3) cond = 'Overcast';
+          else if ([45, 48].includes(code)) cond = 'Foggy';
+          else if ([51, 53, 55, 56, 57].includes(code)) cond = 'Drizzle';
+          else if ([61, 63, 65, 80, 81, 82].includes(code)) cond = 'Rain';
+          else if ([71, 73, 75, 77, 85, 86].includes(code)) cond = 'Snow';
+          else if ([95, 96, 99].includes(code)) cond = 'Thunderstorm';
+
+          setWeatherData({
+            temp: Math.round(cur.temperature_2m),
+            feelsLike: Math.round(cur.apparent_temperature),
+            humidity: Math.round(cur.relative_humidity_2m),
+            windSpeed: Math.round(cur.wind_speed_10m),
+            condition: cond,
+            code: code,
+            loading: false
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Live weather fetch:", err);
+    }
+  };
+
   // Live ticking clock updating every 1000ms
   useEffect(() => {
     const timer = setInterval(() => {
@@ -195,17 +251,20 @@ export default function Workstation({
       if (res.ok) {
         const data = await res.json();
         if (data.geolocation) {
+          const sLat = data.geolocation.lat || 16.2322;
+          const sLon = data.geolocation.lon || 80.5484;
           setGeoData(prev => ({
             ...prev,
             city: data.geolocation.city || prev.city,
             region: data.geolocation.region || prev.region,
             country: data.geolocation.country || prev.country,
-            lat: data.geolocation.lat || prev.lat,
-            lon: data.geolocation.lon || prev.lon,
+            lat: sLat,
+            lon: sLon,
             timezone: data.geolocation.timezone || prev.timezone,
             source: "NETWORK_GATEWAY",
             status: "LOCKED"
           }));
+          fetchLiveWeather(sLat, sLon);
         }
       }
     } catch (e) {
@@ -228,6 +287,8 @@ export default function Workstation({
             source: "GPS_HARDWARE",
             status: "HARDWARE_LOCKED"
           }));
+
+          fetchLiveWeather(lat, lon);
 
           // Reverse geocode via OpenStreetMap Nominatim for exact city name
           try {
@@ -266,6 +327,13 @@ export default function Workstation({
 
   useEffect(() => {
     acquireLiveLocation();
+    fetchLiveWeather(16.2322, 80.5484); // Pre-warm weather with default coordinates
+    const weatherInterval = setInterval(() => {
+      if (geoData.lat && geoData.lon) {
+        fetchLiveWeather(geoData.lat, geoData.lon);
+      }
+    }, 300000); // 5 min interval
+    return () => clearInterval(weatherInterval);
   }, []);
 
   const formattedDate = currentTime.toLocaleDateString('en-US', {
@@ -323,18 +391,60 @@ export default function Workstation({
     }
   }, [logs]);
 
+  // Gracefully start a completely fresh session (from "+ New Chat" button or toolbar)
+  const handleStartFreshSession = async (customTitle = "Interactive Inspection Session") => {
+    let newId = null;
+    if (onCreateNewSession) {
+      newId = await onCreateNewSession(customTitle);
+    }
+    setOpticalFile(null);
+    setOpticalImage(null);
+    setSarFile(null);
+    setSarImage(null);
+    setBitemporalAfter(null);
+    setMetadata(null);
+    setGroundingBoxes([]);
+    setQuery('');
+    setOutput('');
+    setLiveChatHistory([]);
+    setLogs([
+      { step: 1, text: "SatQuery AI Workstation reset — Ready for new satellite image ingestion." }
+    ]);
+    setPdfStatusToast({
+      type: 'success',
+      message: 'New Geospatial Session Initialized — Ready for fresh image upload.'
+    });
+    setTimeout(() => setPdfStatusToast(null), 4000);
+    return newId;
+  };
+
   // Handle GeoTIFF upload and metadata parsing via FastAPI backend
   const handleImport = async (e, target) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['tif', 'tiff', 'geotiff', 'png', 'jpg', 'jpeg'].includes(ext)) {
+    if (!['tif', 'tiff', 'geotiff', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext)) {
       setErrorMsg({
         title: "Invalid File Format",
-        desc: "SatQuery Agentic framework requires georeferenced GeoTIFF (.tif) format files for active spatial calibration."
+        desc: "SatQuery accepts GeoTIFF (.tif, .tiff, .geotiff) and raster images (.png, .jpg, .jpeg, .webp, .bmp)."
       });
       return;
+    }
+
+    // Auto-archive previous session and fork a fresh session when a new primary image is ingested!
+    if (target === 'optical' && (opticalImage || (liveChatHistory && liveChatHistory.length > 1))) {
+      if (onCreateNewSession) {
+        await onCreateNewSession(file.name);
+      }
+      setGroundingBoxes([]);
+      setQuery('');
+      setOutput('');
+      setPdfStatusToast({
+        type: 'success',
+        message: `New raster loaded: ${file.name} — Fresh session initialized.`
+      });
+      setTimeout(() => setPdfStatusToast(null), 4000);
     }
 
     setErrorMsg(null);
@@ -933,28 +1043,28 @@ export default function Workstation({
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-[#F43F5E]/06 rounded-full blur-[160px] pointer-events-none" />
       </div>
 
-      {/* Floating High-Contrast Glass Header Bar */}
-      <header className="relative z-10 h-12 px-4 sm:px-6 flex items-center justify-between rounded-2xl border border-white/10 bg-[#12131C]/90 shrink-0 backdrop-blur-2xl shadow-xl">
-        <div className="flex items-center gap-2.5">
+      {/* Floating High-Contrast Glass Header Bar (Enlarged & Prominent) */}
+      <header className="relative z-10 h-15 sm:h-16 px-4 sm:px-7 flex items-center justify-between rounded-2xl border border-white/10 bg-[#12131C]/90 shrink-0 backdrop-blur-2xl shadow-xl">
+        <div className="flex items-center gap-3">
           {/* Matching High-Tech Logo Emblem & Title */}
           <div 
             onClick={onBackToHub || onBackToHero}
             title="SatQuery AI - Return to Command Hub"
-            className="flex items-center gap-2.5 group cursor-pointer"
+            className="flex items-center gap-3 group cursor-pointer"
           >
-            <div className="relative flex items-center justify-center w-8 h-8 rounded-xl overflow-hidden bg-[#08090C] border border-[#8B5CF6]/50 shadow-[0_0_14px_rgba(139,92,246,0.3)] backdrop-blur-md transition-all duration-300 group-hover:border-[#8B5CF6] shrink-0">
+            <div className="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-[#08090C] border border-[#8B5CF6]/50 shadow-[0_0_16px_rgba(139,92,246,0.35)] backdrop-blur-md transition-all duration-300 group-hover:border-[#8B5CF6] shrink-0">
               <img 
                 src="/satquery_logo.png" 
                 alt="SatQuery AI Logo" 
                 className="w-full h-full object-cover scale-110"
               />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#10B981] border border-[#08090C]" />
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#10B981] border-2 border-[#08090C]" />
             </div>
-            <div className="flex items-center gap-1 leading-none">
-              <span className="font-sans font-black text-sm tracking-tight text-white drop-shadow-md">
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className="font-sans font-black text-base sm:text-lg tracking-tight text-white drop-shadow-md">
                 SatQuery
               </span>
-              <span className="font-mono font-black text-sm tracking-wide bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#10B981] bg-clip-text text-transparent">
+              <span className="font-mono font-black text-base sm:text-lg tracking-wide bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#10B981] bg-clip-text text-transparent">
                 AI
               </span>
             </div>
@@ -962,38 +1072,68 @@ export default function Workstation({
         </div>
 
         {/* Real Live Indian / User Standard Time & Local Weather Node */}
-        <div className="hidden md:flex items-center gap-3 text-xs font-mono">
+        <div className="hidden md:flex items-center gap-2.5 lg:gap-3.5 text-xs sm:text-sm font-mono overflow-hidden">
           
           {/* Real Live Date & Time */}
-          <div className="flex items-center gap-1.5 text-white/90">
+          <div className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0">
             <Calendar className="w-3.5 h-3.5 text-[#C084FC] shrink-0" />
             <span className="font-semibold text-white tracking-wide">
               {formattedDate}
             </span>
           </div>
 
-          <span className="text-white/20">|</span>
+          <span className="text-white/20 shrink-0">|</span>
 
           {/* Real Live Digital Clock */}
-          <div className="flex items-center gap-1.5 text-white/90">
+          <div className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0">
             <Clock className="w-3.5 h-3.5 text-[#34D399] shrink-0" />
-            <span className="font-bold text-[#34D399] tracking-wider text-[13px]">
+            <span className="font-bold text-[#34D399] tracking-wider text-xs sm:text-sm">
               {formattedTime}
             </span>
-            <span className="text-[9px] text-slate-400">{timeZoneName.split('/').pop()?.replace('_', ' ')}</span>
+            <span className="text-[10px] text-slate-400 font-medium">{timeZoneName.split('/').pop()?.replace('_', ' ')}</span>
           </div>
 
-          <span className="text-white/20">|</span>
+          <span className="text-white/20 shrink-0">|</span>
 
           {/* Real Live Location & GPS Fix */}
-          <div className="flex items-center gap-1.5 text-white/90">
+          <div className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0">
             <MapPin className="w-3.5 h-3.5 text-[#F43F5E] shrink-0" />
-            <span className="font-semibold text-[#FDA4AF] text-[11px]">
+            <span className="font-semibold text-[#FDA4AF] text-xs sm:text-sm">
               {geoData.city ? `${geoData.city}, ${geoData.country}` : `${geoData.lat.toFixed(4)}°, ${geoData.lon.toFixed(4)}°`}
             </span>
-            <span className="text-[9px] text-slate-400">
+            <span className="text-[10px] text-slate-400 hidden xl:inline">
               ({geoData.lat.toFixed(4)}°N, {geoData.lon.toFixed(4)}°E)
             </span>
+          </div>
+
+          <span className="text-white/20 shrink-0">|</span>
+
+          {/* Real Live Weather Node */}
+          <div 
+            className="flex items-center gap-1.5 text-white/90 whitespace-nowrap shrink-0 bg-white/5 px-2.5 py-1 rounded-full border border-white/10"
+            title={`Live Atmospheric Telemetry: ${weatherData.condition} (${weatherData.temp !== null ? weatherData.temp : '--'}°C), Humidity: ${weatherData.humidity !== null ? weatherData.humidity : '--'}%, Wind: ${weatherData.windSpeed !== null ? weatherData.windSpeed : '--'} km/h`}
+          >
+            {weatherData.code === 0 || weatherData.code === 1 ? (
+              <Sun className="w-3.5 h-3.5 text-[#FBBF24] shrink-0 animate-pulse" />
+            ) : weatherData.code === 2 ? (
+              <CloudSun className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+            ) : [61, 63, 65, 80, 81, 82].includes(weatherData.code) ? (
+              <CloudRain className="w-3.5 h-3.5 text-[#60A5FA] shrink-0" />
+            ) : (
+              <Cloud className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+            )}
+            <span className="font-bold text-[#38BDF8] text-xs sm:text-sm tracking-wide">
+              {weatherData.temp !== null ? `${weatherData.temp}°C` : '--°C'}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-200">
+              {weatherData.condition}
+            </span>
+            {weatherData.humidity !== null && (
+              <span className="hidden xl:inline-flex items-center gap-0.5 text-[10px] text-slate-400 pl-1 border-l border-white/10">
+                <Droplets className="w-3 h-3 text-[#38BDF8]/70" />
+                {weatherData.humidity}%
+              </span>
+            )}
           </div>
 
           {/* Re-Sync Button with spinning animation */}
@@ -1001,15 +1141,15 @@ export default function Workstation({
             type="button"
             onClick={acquireLiveLocation}
             disabled={isLocating}
-            title="Re-acquire Live GPS Fix & Recalibrate Clock"
-            className="ml-1 p-1 rounded-full hover:bg-white/10 text-[#34D399] hover:text-white transition cursor-pointer"
+            title="Re-acquire Live GPS Fix, Weather & Recalibrate Clock"
+            className="p-1 rounded-full hover:bg-white/10 text-[#34D399] hover:text-white transition cursor-pointer shrink-0"
           >
-            <RotateCw className={`w-3 h-3 ${isLocating ? 'animate-spin text-[#34D399]' : ''}`} />
+            <RotateCw className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin text-[#34D399]' : ''}`} />
           </button>
         </div>
 
         {/* Header Actions: PDF Export + Lock Button */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
 
           {/* High-Tech EXPORT REPORT (PDF) Button with High-Contrast Gradient */}
           <button
@@ -1018,9 +1158,9 @@ export default function Workstation({
             onClick={() => handleExportPDF()}
             disabled={isExporting}
             title="Download Executive Geospatial Intelligence PDF Report"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F43F5E] hover:opacity-95 text-white font-mono font-black text-xs transition-all cursor-pointer shadow-[0_0_18px_rgba(139,92,246,0.4)] backdrop-blur-md active:scale-95 shrink-0"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F43F5E] hover:opacity-95 text-white font-mono font-black text-xs sm:text-sm transition-all cursor-pointer shadow-[0_0_20px_rgba(139,92,246,0.4)] backdrop-blur-md active:scale-95 shrink-0"
           >
-            <Download className={`w-3.5 h-3.5 text-white ${isExporting ? 'animate-bounce' : ''}`} />
+            <Download className={`w-4 h-4 text-white ${isExporting ? 'animate-bounce' : ''}`} />
             <span className="hidden sm:inline">{isExporting ? "GENERATING PDF..." : "EXPORT REPORT (PDF)"}</span>
             <span className="sm:hidden">{isExporting ? "PDF..." : "EXPORT"}</span>
           </button>
@@ -1031,7 +1171,7 @@ export default function Workstation({
               type="button"
               onClick={onLogoutClick}
               title="Sign out of SatQuery AI"
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#08090C] hover:bg-rose-950/80 border border-white/10 hover:border-rose-500/60 text-slate-300 hover:text-rose-200 text-xs font-mono font-bold transition-all cursor-pointer backdrop-blur-md shrink-0"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#08090C] hover:bg-rose-950/80 border border-white/10 hover:border-rose-500/60 text-slate-300 hover:text-rose-200 text-xs sm:text-sm font-mono font-bold transition-all cursor-pointer backdrop-blur-md shrink-0"
             >
               <span>LOGOUT</span>
             </button>
@@ -1115,7 +1255,7 @@ export default function Workstation({
                   <input 
                     ref={opticalInputRef}
                     type="file" 
-                    accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg" 
+                    accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.webp,.bmp" 
                     onChange={(e) => handleImport(e, 'optical')} 
                     className="hidden" 
                   />
@@ -1147,7 +1287,7 @@ export default function Workstation({
                     <input 
                       ref={sarInputRef}
                       type="file" 
-                      accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg" 
+                      accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.webp,.bmp" 
                       onChange={(e) => handleImport(e, 'sar')} 
                       className="hidden" 
                     />
@@ -1789,6 +1929,7 @@ export default function Workstation({
             onExportPDF={handleExportPDF}
             isExporting={isExporting}
             backendUrl={BACKEND_HTTP}
+            onNewChat={handleStartFreshSession}
           />
         </aside>
 
