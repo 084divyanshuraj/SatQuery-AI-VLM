@@ -376,11 +376,16 @@ def dispatch_trained_vlm_query(
     image_bytes: bytes, 
     mime: str = "image/jpeg", 
     after_bytes: Optional[bytes] = None, 
-    mime_after: str = "image/jpeg"
+    mime_after: str = "image/jpeg",
+    sar_bytes: Optional[bytes] = None,
+    mime_sar: str = "image/jpeg"
 ) -> Optional[dict]:
     """
     Directly dispatches inference to the fine-tuned VLM (Qwen2.5-VL-7B + LoRA, VRSBench).
-    Returns parsed result dictionary or None if offline.
+    Routes to:
+      1. /query_crossmodal (Model 3: Optical + SAR Polarimetric Fusion)
+      2. /query_bitemporal (Model 2: Dual-Pass Bi-Temporal Change T0 vs T1)
+      3. /query (Model 1: Single Image VQA / Detailed Captioning)
     """
     active_url, model_tag = get_vlm_endpoints()
     if not active_url:
@@ -389,7 +394,16 @@ def dispatch_trained_vlm_query(
     import requests
     headers = {"ngrok-skip-browser-warning": "true"}
     try:
-        if after_bytes:
+        if sar_bytes:
+            # Model 3: Optical-SAR Multimodal Fusion
+            files = {
+                "image_opt": ("optical.jpg", image_bytes, mime),
+                "image_sar": ("sar.jpg", sar_bytes, mime_sar)
+            }
+            data = {"query": query}
+            resp = requests.post(f"{active_url}/query_crossmodal", data=data, files=files, headers=headers, timeout=35)
+        elif after_bytes:
+            # Model 2: Bi-Temporal Change Detection
             files = {
                 "image_t0": ("t0.jpg", image_bytes, mime),
                 "image_t1": ("t1.jpg", after_bytes, mime_after)
@@ -397,10 +411,7 @@ def dispatch_trained_vlm_query(
             data = {"query": query}
             resp = requests.post(f"{active_url}/query_bitemporal", data=data, files=files, headers=headers, timeout=28)
         else:
-            # If the user asks an open-ended scene inspection/overview question like:
-            # "whats there in this image", "tell me what is in this image", "explain what all is here",
-            # The fine-tuned VQA branch default outputs a terse class label like "urban area".
-            # Formatting as a detailed scene request triggers the fine-tuned captioning head!
+            # Model 1: Single Image VQA & Captioning
             vlm_query = query
             q_lower = (query or "").lower().strip()
             overview_triggers = [
@@ -661,30 +672,42 @@ async def get_vlm_status():
 async def query_endpoint(
     query: str = Form(...), 
     image: UploadFile = File(...),
-    image_after: Optional[UploadFile] = File(None)
+    image_after: Optional[UploadFile] = File(None),
+    image_sar: Optional[UploadFile] = File(None)
 ):
     """
-    Unified VLM inference endpoint (Single Image & Bi-Temporal).
-    Automatically detects if two temporal rasters (T0 & T1) are provided.
-    Directly routes to trained VLM (Local or Kaggle GPU) with fallback to edge analyzer.
+    Unified VLM inference endpoint supporting all 3 Satellite AI modalities:
+      1. Single Image VQA & Spatial Feature Grounding (Sentinel-2)
+      2. Bi-Temporal Land-Use Change Detection (T0 Baseline vs T1 Post-Event)
+      3. Optical-SAR Multimodal Fusion & Cloud Penetration (Sentinel-1 SAR + Sentinel-2)
     """
     image_bytes = await image.read()
     mime = image.content_type or "image/jpeg"
     after_bytes = await image_after.read() if image_after else None
     mime_after = image_after.content_type if image_after else "image/jpeg"
+    sar_bytes = await image_sar.read() if image_sar else None
+    mime_sar = image_sar.content_type if image_sar else "image/jpeg"
 
-    # 1. Attempt Live Trained VLM first
+    # 1. Attempt Live Trained VLM first (Kaggle GPU or Local)
     vlm_resp = await asyncio.to_thread(
         dispatch_trained_vlm_query,
         query,
         image_bytes,
         mime,
         after_bytes,
-        mime_after
+        mime_after,
+        sar_bytes,
+        mime_sar
     )
     if vlm_resp and (vlm_resp.get("status") == "success" or "result" in vlm_resp or "answer" in vlm_resp):
         logger.info("Successfully dispatched query to trained VLM!")
         return vlm_resp
+
+    # 2. If SAR Radar bytes provided -> Run Model 3 CrossModal Fusion
+    if sar_bytes:
+        logger.info("Engaging Model 3: Optical-SAR Cross-Modal Fusion Engine.")
+        from models.crossmodal_engine import CrossModalFusionEngine
+        return CrossModalFusionEngine.fuse_and_analyze(query, image_bytes, sar_bytes)
 
     try:
         b64_img = f"data:{mime};base64," + base64.b64encode(image_bytes).decode("utf-8")
@@ -757,10 +780,42 @@ async def query_endpoint(
             "execution_trace": {
                 "selected_agent": "bitemporal_change" if after_bytes else "single_image",
                 "selected_task": "change_detection" if after_bytes else "vqa",
-                "routing_reasoning": "Temporal change raster inference.",
-                "tool_used": "satquery-bitemporal-agent" if after_bytes else "satquery-single-image-agent"
+                "routing_reasoning": "Fallback vision heuristic executed.",
+                "tool_used": "satquery-single-image-agent"
             }
         }
+
+@app.post("/query_crossmodal")
+async def query_crossmodal_endpoint(
+    query: str = Form(...),
+    image_opt: UploadFile = File(...),
+    image_sar: UploadFile = File(...)
+):
+    """
+    Dedicated Model 3 Optical-SAR Multimodal Fusion endpoint.
+    Accepts Sentinel-2 Optical and Sentinel-1 SAR imagery.
+    """
+    opt_bytes = await image_opt.read()
+    mime_opt = image_opt.content_type or "image/jpeg"
+    sar_bytes = await image_sar.read()
+    mime_sar = image_sar.content_type or "image/jpeg"
+
+    # Forward to Kaggle if online
+    vlm_resp = await asyncio.to_thread(
+        dispatch_trained_vlm_query,
+        query,
+        opt_bytes,
+        mime_opt,
+        None,
+        "image/jpeg",
+        sar_bytes,
+        mime_sar
+    )
+    if vlm_resp and (vlm_resp.get("status") == "success" or "result" in vlm_resp):
+        return vlm_resp
+
+    from models.crossmodal_engine import CrossModalFusionEngine
+    return CrossModalFusionEngine.fuse_and_analyze(query, opt_bytes, sar_bytes)
 
 @app.post("/query_bitemporal")
 async def query_bitemporal_endpoint(

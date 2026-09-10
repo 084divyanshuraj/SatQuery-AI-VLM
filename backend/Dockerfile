@@ -31,4 +31,4 @@ EXPOSE 7001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:7001/api/health || exit 1
 
-CMD ["uvicorn", "main.py:app", "--host", "0.0.0.0", "--port", "7001"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7001"]

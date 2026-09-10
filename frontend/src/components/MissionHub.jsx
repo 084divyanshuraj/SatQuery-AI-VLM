@@ -193,10 +193,12 @@ export default function MissionHub({
   const [loadingSessions, setLoadingSessions] = useState(false);
   const userId = currentUser?.id || currentUser?.email || 'analyst-default';
 
+  const BACKEND_HTTP = import.meta.env.VITE_BACKEND_URL || "http://localhost:7001";
+
   const fetchSessions = async () => {
     try {
       setLoadingSessions(true);
-      const res = await fetch(`http://localhost:7001/api/history/sessions?user_id=${encodeURIComponent(userId)}`);
+      const res = await fetch(`${BACKEND_HTTP}/api/history/sessions?user_id=${encodeURIComponent(userId)}`);
       if (res.ok) {
         const data = await res.json();
         setSessions(data);
@@ -217,7 +219,7 @@ export default function MissionHub({
 
   const handleStartNewWorkspace = async () => {
     try {
-      const res = await fetch('http://localhost:7001/api/history/sessions', {
+      const res = await fetch(`${BACKEND_HTTP}/api/history/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -243,7 +245,7 @@ export default function MissionHub({
   const handleDeleteSession = async (e, sessionId) => {
     e.stopPropagation();
     try {
-      await fetch(`http://localhost:7001/api/history/sessions/${sessionId}?user_id=${encodeURIComponent(userId)}`, {
+      await fetch(`${BACKEND_HTTP}/api/history/sessions/${sessionId}?user_id=${encodeURIComponent(userId)}`, {
         method: 'DELETE'
       });
       setSessions(prev => prev.filter(s => s.id !== sessionId));
