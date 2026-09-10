@@ -424,6 +424,34 @@ export default function Workstation({
     }
   };
 
+  // Clear / delete specific raster layer (before/optical, after/sar, single)
+  const handleClearRaster = (layerType) => {
+    const sessionKey = activeSessionId || 'default';
+    if (layerType === 'before' || layerType === 'optical' || layerType === 'single') {
+      setOpticalImage(null);
+      setOpticalFile(null);
+      if (opticalInputRef.current) opticalInputRef.current.value = '';
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem(`satquery_img_${sessionKey}`);
+          sessionStorage.removeItem(`satquery_meta_${sessionKey}`);
+        } catch (e) {}
+      }
+      setLayerErrors(prev => ({ ...prev, before: false, optical: false, single: false }));
+    } else if (layerType === 'after' || layerType === 'sar') {
+      setBitemporalAfter(null);
+      setSarImage(null);
+      setSarFile(null);
+      if (sarInputRef.current) sarInputRef.current.value = '';
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem(`satquery_after_${sessionKey}`);
+        } catch (e) {}
+      }
+      setLayerErrors(prev => ({ ...prev, after: false, sar: false }));
+    }
+  };
+
   // Load sample satellite rasters on user action according to active workflow
   const loadSamplePreset = (presetType = null) => {
     setErrorMsg(null);
@@ -1280,6 +1308,24 @@ export default function Workstation({
                       </div>
                     )}
 
+                    {/* Clear / Delete Raster Button */}
+                    {opticalImage && !activeAnalysisResult && (
+                      <button
+                        type="button"
+                        id="btn-clear-single-raster"
+                        data-testid="btn-clear-single-raster"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearRaster('single');
+                        }}
+                        title="Delete / Clear Satellite Photo"
+                        aria-label="Delete Satellite Photo"
+                        className="absolute top-3 right-3 z-30 w-7 h-7 rounded-full bg-[#08090C]/90 hover:bg-[#F43F5E] border border-white/20 hover:border-[#F43F5E] text-slate-300 hover:text-white transition-all cursor-pointer backdrop-blur-md shadow-lg flex items-center justify-center active:scale-90 group/btn"
+                      >
+                        <X className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-200" />
+                      </button>
+                    )}
+
                     {/* Subtle Toggle for Analysis Result (if available) */}
                     {activeAnalysisResult && (
                       <div className="absolute top-3 right-3 flex items-center gap-1 bg-[#08090C]/90 border border-white/15 rounded-lg p-1 backdrop-blur-md z-30 font-mono text-[9px] shadow-lg pointer-events-auto">
@@ -1329,10 +1375,29 @@ export default function Workstation({
               /* WORKFLOW 2: BI-TEMPORAL CHANGE (Exactly 2 satellite images: BEFORE | AFTER) */
               <div className="relative w-full h-full flex flex-col md:flex-row items-center justify-center gap-3 p-3 overflow-hidden">
                 {/* BEFORE LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#10B981] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#10B981] backdrop-blur-md shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden group/before">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#10B981] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#10B981] backdrop-blur-md shadow-[0_0_12px_rgba(16,185,129,0.3)] select-none">
                     BEFORE
                   </div>
+
+                  {/* Top Right Clear/Delete Cross Button for BEFORE */}
+                  {opticalImage && (
+                    <button
+                      type="button"
+                      id="btn-clear-before-raster"
+                      data-testid="btn-clear-before-raster"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleClearRaster('before');
+                      }}
+                      title="Delete / Clear Before Photo"
+                      aria-label="Delete Before Photo"
+                      className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-[#08090C]/90 hover:bg-[#F43F5E] border border-white/20 hover:border-[#F43F5E] text-slate-300 hover:text-white transition-all cursor-pointer backdrop-blur-md shadow-lg flex items-center justify-center active:scale-90 group/btn"
+                    >
+                      <X className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-200" />
+                    </button>
+                  )}
+
                   {layerErrors['before'] ? (
                     <p className="text-white/60 font-mono text-xs">Satellite layer unavailable.</p>
                   ) : opticalImage ? (
@@ -1347,7 +1412,16 @@ export default function Workstation({
                       onError={() => setLayerErrors(prev => ({ ...prev, before: true }))}
                     />
                   ) : (
-                    <p className="text-white/50 font-mono text-xs">Awaiting comparison layer</p>
+                    <div className="flex flex-col items-center justify-center text-center p-4 select-none">
+                      <p className="text-white/60 font-mono text-xs tracking-wide">Awaiting T1 Baseline layer</p>
+                      <button
+                        type="button"
+                        onClick={() => opticalInputRef.current?.click()}
+                        className="text-[#10B981] hover:underline font-mono text-[9px] mt-1 cursor-pointer"
+                      >
+                        Upload T1 GeoTIFF (.tif)
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -1357,10 +1431,29 @@ export default function Workstation({
                 </div>
 
                 {/* AFTER LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#F43F5E] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#F43F5E] backdrop-blur-md shadow-[0_0_12px_rgba(244,63,94,0.3)]">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden group/after">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#F43F5E] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#F43F5E] backdrop-blur-md shadow-[0_0_12px_rgba(244,63,94,0.3)] select-none">
                     AFTER
                   </div>
+
+                  {/* Top Right Clear/Delete Cross Button for AFTER */}
+                  {bitemporalAfter && (
+                    <button
+                      type="button"
+                      id="btn-clear-after-raster"
+                      data-testid="btn-clear-after-raster"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleClearRaster('after');
+                      }}
+                      title="Delete / Clear After Photo"
+                      aria-label="Delete After Photo"
+                      className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-[#08090C]/90 hover:bg-[#F43F5E] border border-white/20 hover:border-[#F43F5E] text-slate-300 hover:text-white transition-all cursor-pointer backdrop-blur-md shadow-lg flex items-center justify-center active:scale-90 group/btn"
+                    >
+                      <X className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-200" />
+                    </button>
+                  )}
+
                   {layerErrors['after'] ? (
                     <p className="text-white/60 font-mono text-xs">Satellite layer unavailable.</p>
                   ) : bitemporalAfter ? (
@@ -1375,9 +1468,15 @@ export default function Workstation({
                       onError={() => setLayerErrors(prev => ({ ...prev, after: true }))}
                     />
                   ) : (
-                    <div className="flex flex-col items-center justify-center text-center p-4">
+                    <div className="flex flex-col items-center justify-center text-center p-4 select-none">
                       <p className="text-white/60 font-mono text-xs tracking-wide">Awaiting comparison layer</p>
-                      <span className="text-white/35 font-mono text-[9px] mt-1">Upload T2 GeoTIFF or load sample</span>
+                      <button
+                        type="button"
+                        onClick={() => sarInputRef.current?.click()}
+                        className="text-[#F43F5E] hover:underline font-mono text-[9px] mt-1 cursor-pointer"
+                      >
+                        Upload T2 GeoTIFF or load sample
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1386,10 +1485,28 @@ export default function Workstation({
               /* WORKFLOW 3: OPTICAL-SAR FUSION (Exactly 2 layers: OPTICAL | SAR) */
               <div className="relative w-full h-full flex flex-col md:flex-row items-center justify-center gap-3 p-3 overflow-hidden">
                 {/* OPTICAL LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#10B981] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#10B981] backdrop-blur-md">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden group/optical">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#10B981] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#10B981] backdrop-blur-md select-none">
                     OPTICAL
                   </div>
+
+                  {/* Top Right Clear/Delete Cross Button for OPTICAL */}
+                  {opticalImage && (
+                    <button
+                      type="button"
+                      id="btn-clear-optical-raster"
+                      data-testid="btn-clear-optical-raster"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleClearRaster('optical');
+                      }}
+                      title="Delete / Clear Optical Photo"
+                      aria-label="Delete Optical Photo"
+                      className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-[#08090C]/90 hover:bg-[#F43F5E] border border-white/20 hover:border-[#F43F5E] text-slate-300 hover:text-white transition-all cursor-pointer backdrop-blur-md shadow-lg flex items-center justify-center active:scale-90 group/btn"
+                    >
+                      <X className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-200" />
+                    </button>
+                  )}
                   {layerErrors['optical'] ? (
                     <p className="text-white/60 font-mono text-xs">Satellite layer unavailable.</p>
                   ) : opticalImage ? (
@@ -1414,10 +1531,28 @@ export default function Workstation({
                 </div>
 
                 {/* SAR LAYER */}
-                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden">
-                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#8B5CF6] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#8B5CF6] backdrop-blur-md">
+                <div className="flex-1 w-full h-full min-h-0 flex flex-col items-center justify-center rounded-xl bg-[#08090C] border border-white/15 p-2 relative overflow-hidden group/sar">
+                  <div className="absolute top-2.5 left-2.5 z-20 bg-[#08090C]/90 border-2 border-[#8B5CF6] px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider text-[#8B5CF6] backdrop-blur-md select-none">
                     SAR
                   </div>
+
+                  {/* Top Right Clear/Delete Cross Button for SAR */}
+                  {sarImage && (
+                    <button
+                      type="button"
+                      id="btn-clear-sar-raster"
+                      data-testid="btn-clear-sar-raster"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleClearRaster('sar');
+                      }}
+                      title="Delete / Clear SAR Photo"
+                      aria-label="Delete SAR Photo"
+                      className="absolute top-2.5 right-2.5 z-30 w-7 h-7 rounded-full bg-[#08090C]/90 hover:bg-[#F43F5E] border border-white/20 hover:border-[#F43F5E] text-slate-300 hover:text-white transition-all cursor-pointer backdrop-blur-md shadow-lg flex items-center justify-center active:scale-90 group/btn"
+                    >
+                      <X className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-200" />
+                    </button>
+                  )}
                   {layerErrors['sar'] ? (
                     <p className="text-white/60 font-mono text-xs">Satellite layer unavailable.</p>
                   ) : sarImage ? (
